@@ -1,0 +1,87 @@
+---
+title: "HW_3"
+output: pdf_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(lasso2)
+library(ggplot2)
+library(ggfortify)
+```
+
+### 2a
+```{r }
+
+## 2
+data("Prostate")
+
+prostate.lm = lm(lcavol~., data = Prostate)
+summary.pros = summary(prostate.lm)
+pros.coefs = summary.pros$coefficients
+# log
+log = cbind(pros.coefs[,"Estimate"],confint(prostate.lm))
+# Normal Scale
+cbind(exp(pros.coefs[,"Estimate"]),exp(confint(prostate.lm)))
+
+1.1^confint(prostate.lm)["lweight",]
+1.1^confint(prostate.lm)["lbph",]
+1.1^confint(prostate.lm)["lcp",]
+1.1^confint(prostate.lm)["lpsa",]
+
+(exp(confint(prostate.lm)["age",]) -1) * 100
+(exp(confint(prostate.lm)["svi",]) - 1) * 100
+(exp(confint(prostate.lm)["gleason",])-1) * 100
+(exp(confint(prostate.lm)["pgg45",])-1) * 100 
+```
+
+## Interpretations
+While holding everything else constant, for a 10% increase in prostate weight, we are 95% confident that cancer volume will increase by -4 to 2.6%. 
+
+While holding everything else constant, we are 95% confident that for every increase of 1 year of patient, the cancer volume will increase by .09 to 4.5% cc.
+
+While holding everything else constant, for a 10% increase in the amount of benign hyperplasia(cm^2), we are 95% confident that cancer volume will change by -1.9 to .2 percent.
+
+While holding everything else constant, we are 95% confident that for every patient with seminal vesicle invasion, the cancer volume will change by -48.22 to 42.05% cc.
+
+While holding everything else constant, for a 10% increase in the amount of capsular penetration(cm), we are 95% confident that cancer volume will increase by 1.97 to 5.2 percent.
+
+While holding everything else constant, we are 95% confident that for every increase of 1 in the Gleason score, the cancer volume will change by -10.94 to 64.44% cc.
+
+While holding everything else constant, we are 95% confident that for every increase of 1 in percentage of gleason scores that are 4 or 5, the cancer volume will change by -1.56 to .144% cc.
+
+While holding everything else constant, for a 10% increase in the amount of prostate specific antigen, we are 95% confident that cancer volume will increase by 3.9 to 7.3%.
+
+
+### 2b
+```{r cars}
+prostate.sv = lm(lcavol ~ svi + lpsa, data = Prostate)
+summary.sv = summary(prostate.sv)
+coefs = summary.sv$coefficients
+cbind(coefs[,"Estimate"],confint(prostate.sv))
+exp(cbind(coefs[,"Estimate"],confint(prostate.sv)))
+coefs.est = coefs[,"Estimate"]
+
+lpsa = Prostate$lpsa
+data1 <- data.frame(cbind(seq(min(lpsa)-1,max(lpsa)+1,
+                              length.out=100),rep(0,100)))
+colnames(data1) <- c("lpsa","svi")
+
+data2 <- data1
+data2$svi <- rep(1,100)
+
+pred.svi.not = predict.lm(prostate.sv,newdata = data1, interval = "c", level = .95 )
+pred.svi = predict.lm(prostate.sv,newdata = data2,interval = "c", level = .95) 
+
+data.svi.not = cbind(data1,pred.svi.not)
+data.svi = cbind(data2, pred.svi)
+
+prostate.plot = ggplot(data = Prostate, aes(x = lpsa, y = lcavol, color = factor(svi))) + geom_point()
+prostate.plot + geom_abline(intercept = coefs.est[1] + coefs.est[2], slope = coefs.est[3], color = "red") +
+  geom_abline(intercept = coefs.est[1], slope = coefs.est[3], color = "blue") +
+  geom_line(data = data.svi, aes(x = lpsa, y = lwr), color = "red", linetype = "dashed") +
+  geom_line(data = data.svi, aes(x = lpsa, y = upr), color = "red", linetype = "dashed") +
+  geom_line(data = data.svi.not, aes(x = lpsa, y = lwr), color = "blue", linetype = "dashed") +
+  geom_line(data = data.svi.not, aes(x = lpsa, y = upr), color = "blue", linetype = "dashed")
+
+```
+

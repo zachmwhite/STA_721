@@ -1,0 +1,56 @@
+---
+title: "Homework 4"
+author: "Zach White"
+date: "9/16/2016"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(lasso2)
+library(ggfortify)
+```
+
+```{r cars}
+data(Prostate)
+prostate.sv = lm(lcavol ~ svi + lpsa, data = Prostate)
+summary.sv = summary(prostate.sv)
+coefs = summary.sv$coefficients
+coefs.est = coefs[,"Estimate"]
+
+lpsa = Prostate$lpsa
+data1 <- data.frame(cbind(seq(min(lpsa)-1,max(lpsa)+1,
+                              length.out=100),rep(0,100)))
+colnames(data1) <- c("lpsa","svi")
+
+data2 <- data1
+data2$svi <- rep(1,100)
+
+ci.svi.not = predict.lm(prostate.sv,newdata = data1, interval = "c", level = .95 )
+ci.svi = predict.lm(prostate.sv,newdata = data2,interval = "c", level = .95) 
+pi.svi.not = predict.lm(prostate.sv,newdata = data1, interval = "p", level = .95 )
+pi.svi = predict.lm(prostate.sv,newdata = data2,interval = "p", level = .95)
+
+data.svi.not = cbind(data1,ci.svi.not)
+data.svi = cbind(data2, ci.svi)
+
+pi.data.svi = cbind(data1,pi.svi)
+pi.data.svi.not = cbind(data2,pi.svi.not)
+
+prostate.plot = ggplot(data = Prostate, aes(x = lpsa, y = lcavol, color = factor(svi))) + geom_point()
+prostate.plot + geom_abline(intercept = coefs.est[1] + coefs.est[2], slope = coefs.est[3], color = "red") +
+  geom_abline(intercept = coefs.est[1], slope = coefs.est[3], color = "blue") +
+  geom_line(data = data.svi, aes(x = lpsa, y = lwr), color = "red", linetype = "dashed") +
+  geom_line(data = data.svi, aes(x = lpsa, y = upr), color = "red", linetype = "dashed") +
+  geom_line(data = data.svi.not, aes(x = lpsa, y = lwr), color = "blue", linetype = "dashed") +
+  geom_line(data = data.svi.not, aes(x = lpsa, y = upr), color = "blue", linetype = "dashed") +
+  geom_line(data = pi.data.svi, aes(x = lpsa, y = lwr), color = "red", linetype = "dotdash") +
+  geom_line(data = pi.data.svi, aes(x = lpsa, y = upr), color = "red", linetype = "dotdash") +
+  geom_line(data = pi.data.svi.not, aes(x = lpsa, y = lwr), color = "blue", linetype = "dotdash") +
+  geom_line(data = pi.data.svi.not, aes(x = lpsa, y = upr), color = "blue", linetype = "dotdash") +
+  labs(x = "meangingful" , y = "meaningful lcavol"  ) +
+  scale_colour_manual(values=c("blue","red")) + 
+  scale_linetype_manual(values = c("solid", "dashed","dotdash")) +
+  scale_color_manual(values = c("blue","red"))
+```
