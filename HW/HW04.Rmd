@@ -41,16 +41,16 @@ pi.data.svi.not = cbind(data2,pi.svi.not)
 prostate.plot = ggplot(data = Prostate, aes(x = lpsa, y = lcavol, color = factor(svi))) + geom_point()
 prostate.plot + geom_abline(intercept = coefs.est[1] + coefs.est[2], slope = coefs.est[3], color = "red") +
   geom_abline(intercept = coefs.est[1], slope = coefs.est[3], color = "blue") +
-  geom_line(data = data.svi, aes(x = lpsa, y = lwr), color = "red", linetype = "dashed") +
-  geom_line(data = data.svi, aes(x = lpsa, y = upr), color = "red", linetype = "dashed") +
-  geom_line(data = data.svi.not, aes(x = lpsa, y = lwr), color = "blue", linetype = "dashed") +
-  geom_line(data = data.svi.not, aes(x = lpsa, y = upr), color = "blue", linetype = "dashed") +
-  geom_line(data = pi.data.svi, aes(x = lpsa, y = lwr), color = "red", linetype = "dotdash") +
-  geom_line(data = pi.data.svi, aes(x = lpsa, y = upr), color = "red", linetype = "dotdash") +
-  geom_line(data = pi.data.svi.not, aes(x = lpsa, y = lwr), color = "blue", linetype = "dotdash") +
-  geom_line(data = pi.data.svi.not, aes(x = lpsa, y = upr), color = "blue", linetype = "dotdash") +
-  labs(x = "meangingful" , y = "meaningful lcavol"  ) +
-  scale_colour_manual(values=c("blue","red")) + 
-  scale_linetype_manual(values = c("solid", "dashed","dotdash")) +
-  scale_color_manual(values = c("blue","red"))
+  geom_line(data = data.svi, aes(x = lpsa, y = lwr, color = "red", linetype = "dashed")) +
+  geom_line(data = data.svi, aes(x = lpsa, y = upr, color = "red", linetype = "dashed")) +
+  geom_line(data = data.svi.not, aes(x = lpsa, y = lwr, color = "blue", linetype = "dashed")) +
+  geom_line(data = data.svi.not, aes(x = lpsa, y = upr, color = "blue", linetype = "dashed")) +
+  geom_line(data = pi.data.svi, aes(x = lpsa, y = lwr, color = "red", linetype = "dotdash")) +
+  geom_line(data = pi.data.svi, aes(x = lpsa, y = upr, color = "red", linetype = "dotdash")) +
+  geom_line(data = pi.data.svi.not, aes(x = lpsa, y = lwr, color = "blue", linetype = "dotdash")) +
+  geom_line(data = pi.data.svi.not, aes(x = lpsa, y = upr, color = "blue", linetype = "dotdash")) +
+  labs(x = "log(prostate specific antigen)" , y = "log(cancer volume) (cc)"  ) +
+  scale_colour_manual(name = "SVI status",values=c("blue","red","blue","red"), labels = c("No SVI", "SVI", "No SVI", "SVI")) +
+  scale_linetype_manual(name = "lines",values = c("dashed", "dotdash"), labels = c("Confidence", "Prediction"))
+
 ```
