@@ -1,0 +1,75 @@
+---
+title: "HW06"
+author: "Zach White"
+date: "9/26/2016"
+output: pdf_document
+---
+
+```{r setup, include=FALSE, fig.height= 2, fig.width=5}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(matrixStats)
+library(MASS)
+```
+
+### Problem 3
+
+## Part C
+```{r}
+beta0 = 22
+beta1 = -.05
+phi00 = .5
+phi01 = 1
+phi11 = 6
+nu0 = 40
+SS0 =10
+
+X = matrix(c(rep(1,6),as.factor(1:6)),6,2)  
+    
+b0 = c(beta0,beta1)
+xb0 = X%*%b0
+phi0 = matrix(c(phi00,phi01,phi01,phi11),2,2)
+inv.phi0 = solve(phi0)
+
+sigma2.hat = SS0 / nu0
+
+n.iter = 100000
+y.star = matrix(NA,n.iter,6)
+for(i in 1:n.iter){
+  phi = rgamma(1,nu0/2,SS0/2)
+  beta.sd = sqrt((X %*% inv.phi0 %*% t(X) + diag(6)) / phi)
+  y.star[i,] = mvrnorm(1, xb0, beta.sd)
+}
+pred.quant = colQuantiles(y.star, probs = c(.025,.975))
+col.means = colMeans(y.star)
+weeks = 1:6
+
+## t-distribution
+t.quantiles = matrix(NA, 6,2)
+x.phi.inv = X %*% inv.phi0 %*% t(X)
+for(i in weeks){
+  sigma = (x.phi.inv[i,i] + 1 ) * sigma2.hat
+  t.quantiles[i,] = xb0[i] + sqrt(sigma) *qt(c(.025,.975), df = nu0)
+}
+
+pred.data.frame = as.data.frame(cbind(weeks,col.means, pred.quant))
+plot(weeks,col.means, type = "b")
+
+base = ggplot(data = pred.data.frame, aes(x = weeks))
+ave.base = base + geom_line(aes(y = col.means)) + geom_point(aes(y = col.means))
+ave.base
+
+plot(weeks, col.means, ylim = c(18,25), type = "b")
+lines(weeks, pred.quant[,1], lty = 2, col = "red")
+lines(weeks, pred.quant[,2], lty = 2, col = "red")
+lines(weeks, t.quantiles[,1], lty = 3, col = "blue")
+lines(weeks, t.quantiles[,2], lty = 3, col = "blue")
+legend("bottomleft", lty = c(1,2,3), legend = c("Predictive Means","Predictive quantiles","Student-t predictive"), col = c("black","red", "blue"))
+```
+
+```{r}
+data.in = mean(y.star >= 20 & y.star <= 24)
+data.in
+```
+
+Thus another condition is met because around `r data.in` of the data is between 20 and 24, which is very near the requisite .95

@@ -1,0 +1,153 @@
+---
+title: "Homework 5"
+author: "Zach White"
+date: "9/21/2016"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(lasso2)
+library(dplyr)
+library(MASS)
+```
+
+### Problem 1
+$$
+\begin{aligned}
+P_{X^T} &= (X^TX)(X^TX)^{-} \\
+&= (X^TX)(X^TX)^{-}(X^TX)(X^TX)^{-} \\
+&= (X^TX)(X^TX)^{-} \\
+&= P_{X^T} \\
+\end{aligned}
+$$
+Since $(X^TX)^{-}$ is a generalized inverse $(X^TX)(X^TX)^{-}(X^TX) = (X^TX)$.
+
+Let $w \in C(X^T)$
+$$
+\begin{aligned}
+(X^TX)(X^TX)^{-}w & = X^T(X(X^TX)^{-}w) \\
+&= X^TA \in C(X^T)\\
+\end{aligned}
+$$
+Since since $A = (X(X^TX)^{-}w) \subset n \times 1$.  And thus by defintion, $X^TA \in C(X^T)$
+
+It is clear now that since this condition is met, it is a projection. Since this is a generalized inverse, it doesn't depend on the choice of the inverse.  We will now see if it meets the criteria to be considered an orthogonal projection. 
+
+$$
+\begin{aligned}
+(P_{X^T})^T &= ((X^TX)(X^TX)^{-})^T \\
+&= ((X^TX)^{-})^T(X^TX)^T \\
+&= ((X^TX)^{-})^T(X^TX)
+\end{aligned}
+$$
+Thus, it is not an orthogonal projection because the symmetry condition doesn't hold.
+
+
+### Problem 2
+We know $\lambda = X^Ta$ and $a\in C(X)$.
+$$
+\begin{aligned}
+(I-P_{X^T}) \lambda &= (I-P_{X^T})X^Ta \\
+&= X^Ta - P_{X^T}X^Ta \\
+&= X^Ta - X^Ta \\
+& = 0
+\end{aligned}
+$$
+
+### Problem 3
+We know that $X^TX = U\Lambda U^T$ and the Moore Penrose Generalized Inverse is characterized by $A_{MP}^{-} = U\Lambda^{-} U^T$.
+$$
+\begin{aligned}
+I - P_{X^T} &= I - (X^TX)(X^TX)^{-} \\
+&= I - (U\Lambda U^T)(U\Lambda^{-} U^T) \\
+&= I - U \Lambda \Lambda^{-} U^T \\
+&= UU^T - U \Lambda \Lambda^{-} U^T \\
+&= U(I-\Lambda \Lambda^{-})U^T
+\end{aligned}
+$$
+Now, $I-\Lambda \Lambda^{-}$ is a diagonal matrix where all non-zero eigenvalues will be zero, and all the zero eigenvalues will be 1.  $U$ and $U^T$ will be a matrix where the columns are the eigenvectors of their corresponding eigenvalues.
+
+### Problem 4
+We know that $\psi = \lambda^T\beta$ and $\lambda = a^TX$, which means that $\lambda = (\lambda^T)^T = (a^TX)^T = X^Ta$.  By this we know that $\lambda \in C(X^T)$, and $C(X^T) \subset \mathbb{R}^{p+1}$.  No since $X$ is full rank, we know that $C(X^T)$ spans $\mathbb{R}^{p+1}$.  Now since these are linearly independent by the definition of rank, it forms a span of $\mathbb{R}^{p+1}$, and since $x_* \in \mathbb{R}^{p+1}$, by Gauss-Markov theorem, we have a unique unbiased linear estimator.  Thus, this also also for $x_* \in \mathbb{R}^{p+1}$.
+
+### Problem 5
+Optional
+
+### Problem 6
+```{r}
+data(Prostate)
+
+Prostate$g6 = Prostate$gleason == 6
+Prostate$g7 = Prostate$gleason == 7
+Prostate$g8 = Prostate$gleason == 8
+Prostate$g9 = Prostate$gleason == 9
+
+Prostate$g6 +Prostate$g7 +Prostate$g8 + Prostate$g9
+```
+
+When we add the dummy variables, we get the intercept, and thus these are clearly linearly related to the intercept. 
+
+### Problem 7
+```{r}
+lpsa6789 = lm(lpsa~g6+g7+g8+g9, data = Prostate)
+lpsa6987 = lm(lpsa~g6+g9+g8+g7, data = Prostate)
+lpsa7968 = lm(lpsa~g7+g9+g6+g8, data = Prostate)
+lpsa9876 = lm(lpsa~g9+g8+g7+g6, data = Prostate)
+coefficients(lpsa6789)
+coefficients(lpsa6987)
+coefficients(lpsa7968)
+coefficients(lpsa9876)
+
+lpsa6789.noint = lm(lpsa~ -1 +g6+g7+g8+g9, data = Prostate)
+lpsa6987.noint = lm(lpsa~-1+g6+g9+g8+g7, data = Prostate)
+lpsa7968.noint = lm(lpsa~-1+g7+g9+g6+g8, data = Prostate)
+lpsa9876.noint = lm(lpsa~-1+g9+g8+g7+g6, data = Prostate)
+coefs.1.not = coefficients(lpsa6789.noint)
+coefs.1.not
+coefficients(lpsa6987.noint)
+coefficients(lpsa7968.noint)
+coefs.2.not = coefficients(lpsa9876.noint)
+coefs.2.not
+```
+When we change the order, of the variables, the intercepts adopt the value of the variable ommitted.  For example, in the first model shown lpsa6789, the last variable is g9, and it is ommitted. The intercept takes on the value 2.873, which is nearly equivalent to the model where g9 is the first variable and the intercept is ommitted.  When we change the order, the last variable of the order is ommitted in the model because by that time, we have enough variables to form a linear combination to get that last model.
+
+When we force the intercept to be zero, the first coefficient becomes the value of the variable ommitted by the model, it shows as g6FALSE or something of the sort, but when we compare the first model, where the order is g6,g7,g8,g9, the coefficients are `r coefs.1.not`.  The last model, the order is g9,g8,g7,g6, and the coefficients are `r coefs.2.not`. Now, in this case, the first values are just switched.  So it's as if the first one, the value takes the value of g9 and in the second model, the first value takes the value of g6TRUE from the previous model.
+
+### Problem 8
+```{r}
+lpsa.gleason = lm(lpsa~as.factor(gleason), data = Prostate)
+coefficients(lpsa.gleason)
+head(model.matrix(lpsa.gleason))
+exp(coefficients(lpsa.gleason))
+
+lpsa.noint = lm(lpsa~-1+g7+g8+g9+g6, data = Prostate)
+coefficients(lpsa.noint)
+```
+The equivalent model is when we don't impose an intercept of 0, and we order the models as g9 + g8 + g7 + g6. Thus we can interpret the intercept as a baseline of prostate specific antigen as 5.688, and then each other coefficient would be an increase from there if they get a different score.  For example, while holding everything else constant, if someone were to increase to a level 7 from 6, then the prostate specific antigent would increase 1.173 on average.
+
+
+### Problem 9
+With the model with the intercept and the all the dummies, show it is not estimable using stuff from class.
+```{r}
+lpsa6789 = lm(lpsa~g6+g7+g8+g9, data = Prostate)
+X = model.matrix(lpsa6789)
+xtx = t(X) %*% X
+xtx.inv = ginv(xtx)
+tot.x = xtx %*% xtx.inv
+
+(diag(5) - tot.x) %*% diag(5)
+
+lm.dummy.age = lm(lpsa~g6+g7+g8+g9 + age, data = Prostate)
+X = model.matrix(lm.dummy.age)
+xtx = t(X) %*% X
+xtx.inv = ginv(xtx)
+tot.x.1 = xtx %*% xtx.inv
+(diag(6) - tot.x.1) %*% diag(6)
+```
+
+Thus it is clear that none of the ones in the first matrix are estimable.  But when we add age into the model, something we assume to be estimable, those corresponding vectors will equal 0. 
+
+### Problem 10
+Optional
