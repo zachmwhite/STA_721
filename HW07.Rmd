@@ -1,0 +1,49 @@
+---
+title: "HW07"
+author: "Zach White"
+date: "9/29/2016"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(lasso2)
+```
+
+### Problem 2
+
+## Part D
+```{r}
+data(Prostate)
+lm.lpsa = lm(lpsa~lcavol,data=Prostate) 
+
+cred.int = function(lm.object,alpha,lambda,b.0,nu.0,ss.0,g){
+  X = model.matrix(lm.object)
+  beta.hat = as.matrix(coef(lm.object))
+  ## SSE
+  SSE = t(lm.object$residuals) %*% lm.object$residuals
+  
+  XtX = t(X) %*% X
+  XtX.inv = solve(XtX)
+  
+  
+  big.phi.0 = (1/g)*XtX
+  big.phi.n = (g/(1+g)) * XtX
+  big.phi.n.inv = solve(big.phi.n)
+  
+  b.n = (g/(1+g))*(beta.hat) + (1/(1+g))*b.0
+  nu.n = nu.0 + nrow(X)
+  
+  ss.n = SSE + ss.0 + t(beta.hat) %*% XtX %*% beta.hat + 
+    t(b.0) %*% big.phi.0 %*% b.0 - t(b.n) %*% big.phi.n %*% b.n
+  
+  sigma2.hat = ss.n / nu.n
+  sigma.hat = sqrt(sigma2.hat)
+  
+  SE = sigma.hat * sqrt(t(lambda) %*% big.phi.n.inv %*% lambda)
+  
+  quant = t(lambda) %*% b.n + SE*qt(c(alpha/1,1-alpha/2), df = nu.n)
+  return(quant)
+}
+
+```
