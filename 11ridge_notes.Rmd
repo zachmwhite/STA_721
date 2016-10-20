@@ -1,0 +1,78 @@
+---
+title: "11ridge_notes"
+author: "Zach White"
+date: "10/6/2016"
+output: pdf_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load Library MASS and longley data:
+```{r longley}
+library(MASS)
+data("longley")
+```
+
+Scatter plot matrix of all variables with response "Employed" via a formula in the plot.
+
+```{r plots}
+pairs(Employed ~ ., data=longley)
+```
+
+Correlations among variables.  Which pairs of variables have the highest absolut correlation?
+```{r corr}
+cor(longley)
+```
+
+## Linear Models
+Fit the linear model in R. In the formula, `.` means include all predictors in the dataframe.
+```{r lm}
+longley.lm= lm(Employed ~ ., data=longley)
+summary(longley.lm)
+```
+
+Note that variables that looked like they had strong relationships with the response have standardized $t$ values that are small, and some coefficients are now negative, when the correlation suggested that at least marginally the coefficient would be positive.
+
+```{r}
+summary(lm(Employed ~ scale(longley[,-7]), data=longley))
+```
+
+Same model, but now we will use the `scale` function to center and standardize each predictor.
+
+
+## Ridge Regression
+
+Let's fit the Ridge Regression model using the function `lm.ridge` from MASS.
+
+```{r}
+plot(lm.ridge(Employed ~ ., data=longley, lambda=seq(0, 0.1, 0.0001)) )
+```
+
+The vector `lambda` is a sequence from 0 (OLS) to .1 incrementing by 0.0001.  This is the same as $k$ from the class notes. The plot shows the ridge coefficients under the scaled predictors.     See how the estimated coefficients switch signs!
+
+
+How do we choose the ridge parameter $k$ (or lambda)?   One option is to use Cross-validation or the related Generalized Cross Validation (easier to compute)
+
+```{r gcv}
+select(lm.ridge(Employed ~ ., data=longley, 
+                lambda=seq(0, 0.1, 0.0001)))
+```
+
+
+Refit model with best lambda
+
+```{r}
+longley.RReg = lm.ridge(Employed ~ ., data=longley, lambda=.0028)
+coef(longley.RReg)
+```
+
+or extract from the original object
+
+```{r}
+
+fit = lm.ridge(Employed ~ ., data=longley, lambda=seq(0, 0.1, 0.0001))
+best.lambda = as.numeric(names(which.min(fit$GCV)))
+coef(fit)[which.min(fit$GCV),]
+```
+
