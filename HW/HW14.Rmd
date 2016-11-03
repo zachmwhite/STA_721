@@ -1,0 +1,21 @@
+---
+title: "HW14"
+author: "Zach White"
+date: "November 3, 2016"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, cache = TRUE}
+climate = read.table("http://www.stat.duke.edu/courses/Fall10/sta290/datasets/climate.dat", header = TRUE)
+climate$T.M = droplevels(factor(climate$T.M, labels = c("T","M")))
+titles = c("Mg/Ca", "Alkenone", "Faunal", "Sr/Ca", "Del180", "IceCore", "Pollen", "Noble Gas")
+climate$proxy = droplevels(factor(climate$proxy, labels = titles))
+
+
+
+```
+
