@@ -7,15 +7,94 @@ output: pdf_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(glmnet)
+library(monomvn)
 ```
 
 ```{r, cache = TRUE}
 climate = read.table("http://www.stat.duke.edu/courses/Fall10/sta290/datasets/climate.dat", header = TRUE)
-climate$T.M = droplevels(factor(climate$T.M, labels = c("T","M")))
+climate$T.M = factor(climate$T.M, labels = c("T","M"))
 titles = c("Mg/Ca", "Alkenone", "Faunal", "Sr/Ca", "Del180", "IceCore", "Pollen", "Noble Gas")
+climate$proxy = factor(climate$proxy, labels = titles)
+
+X = model.matrix(lm(deltaT~.,data = climate))
+
+# I'm losing the Mg/Ca. Just do it manually
+climate =read.table("http://www.stat.duke.edu/courses/Fall10/sta290/datasets/climate.dat", header = TRUE)
+climate$T.M = droplevels(factor(climate$T.M, labels = c("T","M")))
 climate$proxy = droplevels(factor(climate$proxy, labels = titles))
 
+dummies.prox = NULL
+for(i in 1:length(titles)){
+  dummies.prox =cbind(dummies.prox,as.numeric(climate$proxy == titles[i]))
+}
 
+colnames(dummies.prox) = titles
 
+interaction1 = dummies.prox * climate$latitude
+interaction2 = dummies.prox * climate$lat^2
+
+interact.labels = c("Mg/Ca:lat1","Alkenoe:lat1","Faunal:lat1","Sr/Ca:lat1", "Del180:lat1","IceCore:lat1","Pollen:lat1","Noble Gas:lat1")
+interact2.labels = c("Mg/Ca:lat2","Alkenoe:lat2","Faunal:lat2","Sr/Ca:lat2", "Del180:lat2","IceCore:lat2","Pollen:lat2","Noble Gas:lat2")
+colnames(interaction1) = interact.labels
+colnames(interaction2) = interact2.labels
+
+Y= climate$deltaT
+## Lasso
+# Interactions first
+X.int.first = as.matrix(cbind(interaction1,interaction2,dummies.prox,poly(climate$latitude,2)))
+first.prelim = cv.glmnet(X.int.first,climate$deltaT,alpha = 1)
+best.lam.first = first.prelim$lambda.min
+interaction.first = glmnet(X.int.first,Y,alpha = 1, lambda = best.lam.first)
+int.first = coef(interaction.first)
+
+# Interactions flipped
+X.int.flipped = as.matrix(cbind(interaction2,interaction1,dummies.prox,poly(climate$latitude,2)))
+flipped.prelim = cv.glmnet(X.int.flipped,Y,alpha = 1)
+best.lam.flipped = flipped.prelim$lambda.min
+interaction.flipped = glmnet(X.int.flipped,Y,alpha = 1, lambda = best.lam.flipped)
+int.flipped = coef(interaction.flipped)
+
+# Poly first
+X.poly.first = as.matrix(cbind(poly(climate$latitude,2),dummies.prox,interaction1,interaction2))
+poly.prelim = cv.glmnet(X.poly.first,Y,alpha = 1)
+best.lam.poly = poly.prelim$lambda.min
+poly.first = glmnet(X.poly.first,Y,alpha = 1, lambda = best.lam.poly)
+poly.flipped = coef(poly.first)
+
+round(int.first,3)
+round(int.flipped,3)
+round(poly.flipped,3)
+```
+Discussion?  Is this due to me just changing the $\lambda$
+
+```{r results = "hide", message = FALSE, cache = TRUE}
+# Bayesian Horseshoe
+# Interactions first
+X.int.first = as.matrix(cbind(interaction1,interaction2,dummies.prox,poly(climate$latitude,2)))
+int.first.bhs = bhs(X.int.first,Y,T=10000)
+int.first.bhs.coef = colMeans(int.first.bhs$beta)
+names(int.first.bhs.coef) = c(interact.labels,interact2.labels,titles,"lat1","lat2")
+
+# Interactions flipped
+X.int.flipped = as.matrix(cbind(interaction2,interaction1,dummies.prox,poly(climate$latitude,2)))
+int.flipped.bhs = bhs(X.int.flipped,Y,T=10000)
+int.flipped.bhs.coef = colMeans(int.flipped.bhs$beta)
+names(int.flipped.bhs.coef) = c(interact2.labels,interact.labels,titles,"lat1","lat2")
+
+# Poly first
+X.poly.first = as.matrix(cbind(poly(climate$latitude,2),dummies.prox,interaction1,interaction2))
+poly.first.bhs = bhs(X.poly.first,Y,T=10000)
+poly.first.bhs.coef = colMeans(poly.first.bhs$beta)
+names(poly.first.bhs.coef) = c("lat1","lat2",titles,interact.labels,interact2.labels)
 ```
 
+```{r}
+round(int.first.bhs.coef,3)
+round(int.flipped.bhs.coef,3)
+round(poly.first.bhs.coef,3)
+```
+
+It is interesting to note that in our first two lasso models where the interactions come first  but are flipped, there isn't that much change.  Many of the same variables that are shrunk to zero are still zero, and many of the coefficients are the same.  However, when we put our poly term first, there are more terms included, which is suprising because in the lasso the order shouldn't matter.
+
+Also, under our bayesian horseshoe models, it seems like there are consistently more coefficients not zero.  As far as measures of uncertainty are concerned, it seems clear that lasso won't really have measures of uncertainty, but a clear benefit of doing the bayesian horseshe are the measures of uncertainty where we could calculate credible intervals quite easily
