@@ -1,0 +1,122 @@
+---
+title: "HW16"
+author: "Zach White"
+date: "November 16, 2016"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(glmnet)
+library(BAS)
+library(monomvn)
+library(BayesVarSel)
+```
+
+```{r results= 'hide', cache = TRUE, message = FALSE, warning = FALSE}
+n = 50
+sigma = 2.5
+betatrue = c(4,2,0,0,0,-1,0,1.5, 0,0,0,1,0,.5,0,0,0,0,-1,1,4)
+#          int|    X1                            | X2     |X3          
+# set the random seed so that we can replicate results.
+set.seed(42)
+n.reps =100
+fname=rep("df",100)
+
+# create 100 datasets
+for (i in 1:n.reps) {
+  Z = matrix(rnorm(n*10, 0, 1), ncol=10, nrow=n)
+  X1 = cbind(Z, (Z[,1:5] %*% c(.3, .5, .7, .9, 1.1) %*% t(rep(1,5)) +
+             matrix(rnorm(n*5, 0, 1), ncol=5, nrow=n)))
+  X2 <- matrix(rnorm(n*4,0,1), ncol=4, nrow=n)
+  X3 <- X2[,4]+rnorm(n,0,sd=0.1)
+  X <- cbind(X1,X2,X3)
+  X = sweep(X, 2, apply(X,2, mean))  # subtract off the column means
+  Y = 4 + X %*% betatrue[-1] + rnorm(n,0,sigma)  # does not have a column of ones for the intercept
+  df = data.frame(Y, X)
+  fname[i] = paste("df", as.character(i), sep="")
+  save(df, file=fname[i])
+}
+
+MSE.OLS  = mse.lasso =  mse.ridge = mse.horse = mse.bma.hyper = mse.bma.zs = rep(0,n.reps)
+MSE.pred = rep(0,n.reps)
+bias.ols = bias.lasso = bias.ridge = bias.horse = bias.bma.hyper = bias.bma.zs = rep(0,n.reps)
+p = 20
+# Expected MSE and MSE of OLS
+for( i in 1:n.reps) {
+  rm(df)
+  load(fname[i])
+  Y = df$Y
+  X = as.matrix(df[,-1])
+  XtX.inv = solve(t(X) %*% X)
+  MSE.pred[i] = sigma^2 * sum(diag(XtX.inv))
+  nk.ols = lm(Y ~ ., data=df)
+  coef.ols = coef(nk.ols)
+  MSE.OLS[i] = sum((betatrue - coef.ols)^2)
+  bias.ols[i] =sum((betatrue - coef.ols))
+  ## Lasso
+  pre.lass = cv.glmnet(X,Y,alpha = 1)
+  best.lam.lass = pre.lass$lambda.min
+  lass.mod = glmnet(X,Y,lambda = best.lam.lass)
+  lass.coefs = coef(lass.mod)
+  mse.lasso[i] = sum((betatrue - lass.coefs)^2)
+  bias.lasso[i] = sum((betatrue - lass.coefs))
+  ## Ridge
+  pre.ridge = cv.glmnet(X,Y,alpha = 0)
+  best.lam.ridge = pre.ridge$lambda.min
+  ridge.mod = glmnet(X,Y,alpha = 0, lambda = best.lam.ridge)
+  ridge.coefs = coef(ridge.mod)
+  mse.ridge[i] = sum((betatrue - ridge.coefs)^2)
+  bias.ridge[i] = sum((betatrue - ridge.coefs))
+  ## Horseshoe
+  horse.mod = bhs(X,Y)
+  horse.betas = cbind(horse.mod$mu,horse.mod$beta)
+  horse.coefs = apply(horse.betas,2,mean)
+  mse.horse[i] = sum((betatrue - horse.coefs)^2)
+  bias.horse[i] = sum((betatrue - horse.coefs))
+  
+  ## Hypergeometric
+  bma.hg = bas.lm(Y ~ X , prior = "hyper-g-n", a = 3, n.models = 2^p,modelprior = uniform())
+  coef.bma.hg = coefficients(bma.hg)
+  coef.hma.hg.post = coef.bma.hg$postmean
+  mse.bma.hyper[i] = sum((betatrue - coef.hma.hg.post)^2)
+  bias.bma.hyper[i] = sum((betatrue - coef.hma.hg.post))
+  
+  ## Zellner-Siow
+  bma.zs = bas.lm(Y~X,prior = "ZS-null", a = n, n.models = 2^p,modelprior = uniform())
+  coef.bma.zs = coefficients(bma.zs)
+  coef.bma.zs.post = coef.bma.zs$postmean
+  mse.bma.zs[i] = sum((betatrue - coef.bma.zs.post)^2)
+  bias.bma.zs[i] = sum((betatrue - coef.bma.zs.post))
+}
+```
+
+```{r results= 'hide', cache = TRUE, message = FALSE, warning = FALSE}
+mse.robust = bias.robust rep(0,n.reps)
+for( i in 1:n.reps) {
+  rm(df)
+  load(fname[i])
+  Y = df$Y
+  X = as.matrix(df[,-1])
+  bma.robust = Bvs("Y~.",data = df,n.keep = 1000)
+  
+
+}
+```
+
+```{r, cache = TRUE}
+# Boxplot
+all.mse = cbind(MSE.OLS,mse.lasso,mse.ridge,mse.horse,mse.bma.hyper,mse.bma.zs)
+boxplot(all.mse)
+
+## Divide them by the minimum
+min.mse = apply(all.mse,1,min)
+adjusted.mse = all.mse / min.mse
+
+# Adjusted boxplot
+boxplot(adjusted.mse)
+boxplot(adjusted.mse,ylim = c(0,10))
+```
+
+In this case, the horseshoe has the lowest MSE.  Also, OLS has the most varied MSE.  And it is clear that the bayesian model averaging are similar with the different priors.  They are very similar, and as we look at the bayesian model averaging models, the median is a little bit higher.    
+
