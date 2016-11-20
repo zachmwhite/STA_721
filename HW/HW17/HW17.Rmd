@@ -1,0 +1,131 @@
+---
+title: "HW17"
+author: "Zach White"
+date: "November 18, 2016"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(MASS)
+library(car)
+library(BMA)
+library(BAS)
+library(R2jags)
+data("stackloss")
+```
+
+# Exercise 13.8
+
+EDA/Pairs plot
+
+```{r}
+pairs(stackloss) 
+```
+
+Looking at these plots, it seems clear that the explantory variables: air flow, water temperature, and acid concentration are all linear related to stack loss.  It seems like the relationship might not be exactly linear with stack loss.  Also there is clearly some multicollinearity between the covariates, but none of them are extremely related, which is important.  The following shows the correlation coefficients between the different variables.
+
+```{r}
+cor(stackloss)
+```
+
+This confirms my initial thoughts.  Water temperature seem to have a clear linear relationship with stack loss, while acid concentration doesn't seem as linearly related.  Also, I note that water temperature and air flow have a correlation coefficient of .782, which is pretty high and suggests multicollinearity.
+
+We will now fit a linear model and asses the fit.
+
+```{r}
+stack.lm <- lm(stack.loss ~ ., data=stackloss)
+avPlots(stack.lm, id.n = 21)
+```
+
+Looking at these plots, I can see a few potential outliers, specifically, it seems like there is one consistent outlier, observation 21.  There are a few other potential outliers, observations 1, 3, and 4.  In a lot of the plots, these observations are a little bit away from the fitted regression line.  However, this is a pretty rudimentary analysis, and we will now explore this is a more refined way by calculating Cook's distance for this model.
+
+```{r}
+par(mfrow = c(2,2))
+plot(stack.lm,id.n = 21)
+```
+When we look at the lower right plot, observation 21 has a Cook's distance greater than .5, which doesn't guarantee it as an outlier, but it certainly seems like it is, considering the other plots, which shows that this observation could very well be an outlier.  However, we don't get as clear of a story on the other potential outliers (1,3, and 4).  Observation number 4, though, does seem like it could be an anomaly with residuls and fitted values, but also, the line seems like it could be pulled down due observation 21.
+
+There are a few other techniques to detect influence and whether an observation is an oulier or not.  Specifically, we will now analyze studentized residuals, and a Bayesian methodology where we will perform both variable selection and outlier detection through MCMC.
+
+```{r}
+im = influence.measures(stack.lm)
+
+plot(rstudent(stack.lm) ~ hatvalues(stack.lm), ylab="Externally Studentized Residual", xlab="Leverage", xlim = c(0,.43))
+with(stack.lm, text(rstudent(stack.lm)~hatvalues(stack.lm), labels = names(rstudent(stack.lm)), pos = 4))
+
+p.val = 2*(1- pt(max(abs(rstudent(stack.lm))), stack.lm$df - 1))
+bon = .05/21
+p.val < bon
+
+```
+
+Here we use a Bonferroni correction because we will be making multiple comparisons.  So we don't want to run the risk of diong multiple tests.  So we will decrease the significance threshold.  We can calcuate a p-value, and as we do so, we can see that this isn't siginificant.  So based on this along, observation 21 isn't an oulier, which is odd because the other tests seem to indicate that it was or at least it could be.
+
+We will now use a Bayesian model Averaging approach to test for outliers.
+
+```{r, cache = TRUE}
+
+attach(stackloss)
+stack.MC3= MC3.REG(stack.loss, stackloss[,-4]
+  ,num.its=10000, outliers=TRUE, M0.out=rep(FALSE, 21), outs.list=1:21, M0.var=rep(TRUE, 3))
+
+summary(stack.MC3)
+detach(stackloss)
+```
+
+Under this approach, we find that the most likely model has a probability of .1857.  This model contains two different variables air flow and water temperature.  This model also classifies 4 observations as outliers: 1, 3, 4, and 21.  The next most likely model has a probability of .137, and it only includes the variable air flow, and it has 2 different observations: 4 and 21.  This two observations were the most likely outliers, with probabilities of .9847 and .9082, respectively.  These observations seem likely to be outliers.  The next two most likely observations to be outliers are 1 and 3, with probabilities of .493 and .51615, respectively.  
+
+As far as the variable selection is concerned, the most probability variables are air flow and water temperature.  The probability that air flow is a part of the model is 1, which means it is included in the model.  The probability water temperature is included is .612, which is also high.  The acid concentration has a probability of .05 of being included in the model.
+
+Although BAS isn't designed to detect outliers, we can change it so it can.  We will propose it under two different prior distributions: truncated beta-binomial and truncated poisson. 
+
+```{r BAS, cache = TRUE}
+n = nrow(stackloss)
+stack.out = cbind(stackloss, diag(n))  #add indicators 
+
+BAS.stack.beta = bas.lm(stack.loss ~ ., 
+                   data=stack.out,
+                   prior="hyper-g-n", a=3,
+                   modelprior=tr.beta.binomial(1, 1, 15), 
+                   method="MCMC",
+                   MCMC.iterations =50000)
+BAS.stack.pois = bas.lm(stack.loss ~ ., 
+                   data=stack.out,
+                   prior="hyper-g-n", a=3,
+                   modelprior=tr.poisson(4, 15),
+                   method="MCMC",
+                   MCMC.iterations =50000)
+
+par(mfrow = c(2,2))
+diagnostics(BAS.stack.beta, type="pip")
+diagnostics(BAS.stack.beta, type="model")
+
+diagnostics(BAS.stack.pois,type = "pip")
+diagnostics(BAS.stack.pois, type = "model")
+
+```
+
+I initially ran this for 10000, but the convergence wasn't ideal.  I ran it for 50000, and the convergence seems better in this case. 
+
+```{r}
+BAS.stack.beta
+t(summary(BAS.stack.beta))   # top 5 models
+
+BAS.stack.pois
+t(summary(BAS.stack.pois))
+```
+
+Differences in the most probable models based on the prior.  With a beta-binomial prior, we have air flow as the only variable.  This model also only has two outliers: 4 and 21.  With the truncated poisson prior, the most likely model has two variables air flow and water temperature with four variables: 1, 3, 4, and 21.  The truncated poisson corresponds to the highest probability model from Bayesian model Averaging approach.  However, the fourth mots likely model under the truncated beta-binomial is the same as the highest probability model under the truncated prior and Bayesian Model Averaging.
+
+As far as the marginal inclusion probabilities are concerned, the two priors are similar.  The marginal inclusion probability for air flow are both basically 1 (under the truncated poisson, it actually is 2).  And for water temperature, the truncated poisson gives a much higher probability.  Also with the outlier detection, it seems like the truncated poisson gives higher probability almost uniformly.  Under the trucated poisson, the four most likely outliers are 1, 3, 4, and 21.  Under the truncated beta-binomial, the most probable are 21, 4, 13, and 2.  And so under these two different priors the results are actually different.  
+
+The following plots show the most probable models under the different prior distributions.
+
+```{r}
+par(mfrow = c(1,1))
+image(BAS.stack.beta)
+image(BAS.stack.pois)
+```
+
+It important to notice that there is more color on the second plot, which means that under the truncated poisson, we are included more variables and detecting more outliers. 
