@@ -1,0 +1,227 @@
+---
+title: "HW18"
+author: "Zach White"
+date: "11/22/2016"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(MASS)
+library(car)
+data(stackloss)
+library(R2jags)
+library(coda)
+library(car)
+library(BMA)
+library(BAS)
+```
+
+# Exercise 3
+
+```{r, cache = TRUE}
+# Create a data list with inputs for JAGS
+
+n = nrow(stackloss)
+## scale X such that X^TX has ones on the diagonal; 
+## scale divides by the standard deviation so we need
+## to divide by the sqrt(n-1) 
+scaled.X = scale(as.matrix(stackloss[, -4]))/sqrt(n-1)
+t(scaled.X) %*% scaled.X
+data = list(Y = stackloss$stack.loss, X=scaled.X, p=ncol(scaled.X))
+data$n = n   #check
+
+data$scales = attr(scaled.X, "scaled:scale")*sqrt(n-1) # fix scale
+data$Xbar = attr(scaled.X, "scaled:center")
+
+# define a function that returns the Model 
+  rr.model = function() {
+    a  <- 9
+    shape <- a/2
+    delta <- 6
+    delta.shape <- delta / 2
+    
+    for (i in 1:n) {
+      mu[i] <- alpha0 + inprod(X[i,], alpha)
+      lambda[i] ~ dgamma(shape, shape)
+      prec[i] <- phi*lambda[i]
+      Y[i] ~ dnorm(mu[i], prec[i])
+    }
+    phi ~ dgamma(1.0E-6, 1.0E-6)
+    alpha0 ~ dnorm(0, 1.0E-6)
+    
+    for (j in 1:p) {
+      prec.beta[j] <- lambda.beta[j]*phi
+      alpha[j] ~ dnorm(0, prec.beta[j])
+      beta[j] <- alpha[j]/scales[j] 
+      lambda.beta[j] ~ dgamma(delta.shape, delta.shape)
+    }
+    
+    beta0 <- alpha0 - inprod(beta[1:p], Xbar)
+    sigma <- pow(phi, -.5)
+  }
+  
+  
+  parameters = c("beta0", "beta", "sigma","lambda.beta", "lambda")
+  
+  
+  bf.sim = jags(data, inits=NULL, par=parameters, model=rr.model,  n.iter=10000)
+
+
+bf.bugs = as.mcmc(bf.sim$BUGSoutput$sims.matrix)  # create an MCMC object 
+
+apply(bf.bugs,2,quantile,c(.025,.975))
+boxplot(as.matrix(bf.bugs[,c(6:26)]))
+```
+
+The values that corresponded with outliers from our previous analysis are generally lower.  However, they aren't necessarily as low as I was anticipating.
+
+```{r, cache = TRUE}
+a.vec = c(5,10,15,20)
+delta.vec = c(2,7,12,17)
+nreps = 3000
+mcmc.array = array(0, c(4,nreps,30))
+
+for(i in 1:length(a.vec)){
+# Create a data list with inputs for JAGS
+a = a.vec[i]
+delta = delta.vec[i]
+n = nrow(stackloss)
+## scale X such that X^TX has ones on the diagonal; 
+## scale divides by the standard deviation so we need
+## to divide by the sqrt(n-1) 
+scaled.X = scale(as.matrix(stackloss[, -4]))/sqrt(n-1)
+t(scaled.X) %*% scaled.X
+data = list(Y = stackloss$stack.loss, X=scaled.X, p=ncol(scaled.X))
+data$n = n   #check
+data$a = a
+data$delta = delta
+
+data$scales = attr(scaled.X, "scaled:scale")*sqrt(n-1) # fix scale
+data$Xbar = attr(scaled.X, "scaled:center")
+
+# define a function that returns the Model 
+  rr.model = function() {
+    shape <- a/2
+    delta.shape <- delta / 2
+    
+    for (i in 1:n) {
+      mu[i] <- alpha0 + inprod(X[i,], alpha)
+      lambda[i] ~ dgamma(shape, shape)
+      prec[i] <- phi*lambda[i]
+      Y[i] ~ dnorm(mu[i], prec[i])
+    }
+    phi ~ dgamma(1.0E-6, 1.0E-6)
+    alpha0 ~ dnorm(0, 1.0E-6)
+    
+    for (j in 1:p) {
+      prec.beta[j] <- lambda.beta[j]*phi
+      alpha[j] ~ dnorm(0, prec.beta[j])
+      beta[j] <- alpha[j]/scales[j] 
+      lambda.beta[j] ~ dgamma(delta.shape, delta.shape)
+    }
+    
+    beta0 <- alpha0 - inprod(beta[1:p], Xbar)
+    sigma <- pow(phi, -.5)
+  }
+  
+  
+  parameters = c("beta0", "beta", "sigma","lambda.beta", "lambda")
+  
+  
+  bf.sim = jags(data, inits=NULL, par=parameters, model=rr.model,  n.iter=10000)
+
+
+  bf.bugs = as.mcmc(bf.sim$BUGSoutput$sims.matrix)  # create an MCMC object
+  
+  mcmc.array[i,,] = bf.bugs
+}
+
+first = mcmc.array[1,,]
+second = mcmc.array[2,,]
+third = mcmc.array[3,,]
+fourth = mcmc.array[4,,]
+apply(first,2,quantile,c(.025,.975))
+apply(second,2,quantile,c(.025,.975))
+apply(third,2,quantile,c(.025,.975))
+apply(fourth,2,quantile,c(.025,.975))
+boxplot(as.matrix(first[,c(6:26)]))
+boxplot(as.matrix(second[,c(6:26)]))
+boxplot(as.matrix(third[,c(6:26)]))
+boxplot(as.matrix(fourth[,c(6:26)]))
+```
+
+It seems clear that the value of $\lambda$ is related to whether or not something is an outlier.  The lower values of $\lambda$ generally are indicative of the presence of outlieras.  However, it is important to note that this also changes with our values of $a$ and $\delta$.  When these are larger, then the values of $\lambda$ generally increase.  So we could hypothetically tune these paramters to adjust for how probable we we think there are outliers in the data and how much they are affecting our $\beta$ values.  If we are sure that there are outliers, then we can se $a$ and $\delta$ lower because that makes it more likely that there are outliers.  Now that since the values of $\lambda$ change based on $a$ and $\delta$, it is hard to know what are true outliers.  
+
+I now compare this methodology with MC3.REG and BAS.  We did this in the last assignment.
+```{r}
+attach(stackloss)
+stack.MC3= MC3.REG(stack.loss, stackloss[,-4]
+  ,num.its=10000, outliers=TRUE, M0.out=rep(FALSE, 21), outs.list=1:21, M0.var=rep(TRUE, 3))
+
+summary(stack.MC3)
+detach(stackloss)
+n = nrow(stackloss)
+stack.out = cbind(stackloss, diag(n))  #add indicators 
+BAS.stack.pois = bas.lm(stack.loss ~ ., 
+                   data=stack.out,
+                   prior="hyper-g-n", a=3,
+                   modelprior=tr.poisson(4, 15),
+                   method="MCMC",
+                   MCMC.iterations =50000)
+
+BAS.stack.pois
+t(summary(BAS.stack.pois))
+```
+
+The results seem comparable.  However, it does seem more difficult to detect outliers with higher levels of $a$ and $\delta$ because the values generally get bigger also.  This seems like it could present a challenge.  However, there does seem to be consensus that 1, 3, 4, and 21 are outliers
+
+# Exercise 4
+```{r, cache = TRUE}
+# Create a data list with inputs for JAGS
+
+n = nrow(stackloss)
+scaled.X = scale(as.matrix(stackloss[, -4]))
+data = list(Y = stackloss$stack.loss, X=scaled.X, p=ncol(scaled.X))
+data$n = n   #check
+
+data$scales = attr(scaled.X, "scaled:scale")
+data$Xbar = attr(scaled.X, "scaled:center")
+
+# define a function that returns the Model 
+horseshoe.model = function() {
+  for (i in 1:n) {
+    mu[i] <- alpha0 + inprod(X[i,], alpha)
+    Y[i] ~ dnorm(mu[i], phi)
+  }
+  phi ~ dgamma(1.0E-6, 1.0E-6)
+  alpha0 ~ dnorm(0, 1.0E-6)
+  
+  for (j in 1:p) {
+    prec.beta[j] <- phi/pow(tau[j],2)
+    tau[j] ~ dt(0,1/lambda^2,1)%_%T(0,)
+
+    alpha[j] ~ dnorm(0, prec.beta[j])
+    beta[j] <- alpha[j]/scales[j] 
+  }
+  lambda ~ dt(0,1,1)%_%T(0,)  
+  beta0 <- alpha0 - inprod(beta[1:p], Xbar)
+  sigma <- pow(phi, -.5)
+}
+  
+  
+parameters = c("beta0", "beta", "sigma","tau")
+  
+  
+horse.sim = jags(data, inits=NULL, par=parameters, model=horseshoe.model,  n.iter=10000)
+
+
+horse.bugs = as.mcmc(horse.sim$BUGSoutput$sims.matrix)  # create an MCMC object 
+
+apply(horse.bugs,2,quantile,c(.025,.075))
+```
+
+# Exercise 5
+All of these different analyses use different techniques for the same purpose of handling outliers.  So, obviously some will have advantages over others.  For example, we don't are not dealing with any type of outlier detection in the horseshoe.  We could hypothetically change this by adding indicator functions to our design matrix, but currently I haven't done this.
+
+However, the previous methods do deal with variable selection.  Something that I note though is that under the the bounded influence, the interpretation can be a little bit more difficult.  It does seem like a very plausible way to do it.  The MC3reg was specifically designed for variable selection and outlier detection.  Whereas we are coercing BAS into doing this.  The frequentist methods that we've gone over, they can perform variable selection and outlier detection, but they are distinct operators.  From the outlier detection, we can't get meaningful $\beta$ values.  Whereas under these approaches, we can get meaningful $\beta$ values while doing outlier detection.
