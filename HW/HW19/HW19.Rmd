@@ -1,0 +1,393 @@
+---
+title: "HW19"
+author: "Zach White"
+date: "11/29/2016"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(MASS)
+library(R2jags)
+library(R2WinBUGS)
+library(rjags)
+library(dplyr)
+setwd("/home/grad/zmw5/Fall 2016/STA 721/STA_721/HW/HW19")
+load("ames_train.Rdata")
+attach(ames_train)
+```
+
+# Question 1
+
+## Part A
+```{r, cache = TRUE}
+
+X = cbind(area,Garage.Area,X1st.Flr.SF,X2nd.Flr.SF,Total.Bsmt.SF,Lot.Area)
+data.cont = as.data.frame(cbind(price,X))
+lm.cont = lm(price~.,data = data.cont)
+par(mfrow = c(2,2))
+plot(lm.cont)
+lm.log.cont = lm(log(price)~., data= data.cont)
+plot(lm.log.cont)
+
+# Box cox
+par(mfrow = c(1,2))
+boxplot(price, main = "Price")
+hist(price,freq = FALSE, ylim = c(0,9e-06))
+lines(density(price))
+
+
+log.price = log(price)
+par(mfrow = c(1,2))
+boxplot(log.price, main = "log(Price)")
+hist(log.price, freq = FALSE, ylim = c(0,1.25))
+lines(density(log.price))
+
+par(mfrow = c(1,2))
+hist(price,freq = FALSE, ylim = c(0,9e-06))
+lines(density(price))
+hist(log.price, freq = FALSE, ylim = c(0,1.25))
+lines(density(log.price))
+
+bc = boxcox(lm.cont)
+lambda = bc$x[which.max(bc$y)]
+data.cont = data.cont %>% mutate(bc_price = (price^lambda-1) /lambda) %>% dplyr::select(-price)
+mod = lm(bc_price~.,data = data.cont)
+par(mfrow = c(2,2))
+plot(mod)
+```
+
+It's clear the the sale price of homes is right skewed.  And the first two plots show that it is fairly heavy tailed.  We would expect this considering that most homes will be priced in the same range, but there will be some outliers to the right. This value is also bounded to the left by 0.  I will use the boxcox transformation
+
+```{r}
+par(mfrow = c(1,2))
+boxplot(area, main = "Area")
+hist(area,freq = FALSE)
+lines(density(area))
+par(mfrow = c(1,2))
+log.area = log(area)
+boxplot(log.area,main = "log(Area)")
+hist(log.area, freq = FALSE, main = "log(Area)")
+lines(density(log.area))
+
+par(mfrow = c(1,2))
+hist(area,freq = FALSE)
+lines(density(area))
+hist(log.area, freq = FALSE, ylim = c(0,1.25))
+lines(density(log.area))
+
+```
+
+This is also right skewed.  However, the log transformation makes it more normal, but it doesn't make it perfect.  I would recommend this transformation because it does make it more normal.
+
+```{r}
+par(mfrow = c(1,2))
+boxplot(Garage.Area, main = "Garage.Area")
+hist(Garage.Area,freq = FALSE)
+lines(density(Garage.Area, na.rm = TRUE))
+par(mfrow = c(1,2))
+log.Garage.Area = log(Garage.Area + 1)
+boxplot(log.Garage.Area,main = "log(Garage.Area)")
+hist(log.Garage.Area, freq = FALSE, main = "log(Garage.Area)")
+lines(density(log.Garage.Area, na.rm = TRUE))
+
+par(mfrow = c(1,2))
+hist(Garage.Area,freq = FALSE)
+lines(density(Garage.Area, na.rm = TRUE))
+hist(log.Garage.Area, freq = FALSE, ylim = c(0,1.25))
+lines(density(log.Garage.Area, na.rm = TRUE))
+
+
+```
+
+In this case, the log transformation doesn't really do much.  The underlying distribution is multi-modal, which makes sense when we think about houses and garages.  A lot of garages are pretty standardized, and there are also a lot of houses without garages.   I wouldn't transform this data.  I proposed a log transform where we add one to the variable and then log it.  It seems clear that the number of houses with garages is significant enough to make this transformation not worth it.
+
+```{r}
+par(mfrow = c(1,2))
+boxplot(X1st.Flr.SF, main = "X1st.Flr.SF")
+hist(X1st.Flr.SF,freq = FALSE)
+lines(density(X1st.Flr.SF, na.rm = TRUE))
+par(mfrow = c(1,2))
+log.X1st.Flr.SF = log(X1st.Flr.SF)
+boxplot(log.X1st.Flr.SF,main = "log(X1st.Flr.SF)")
+hist(log.X1st.Flr.SF, freq = FALSE, main = "log(X1st.Flr.SF)")
+lines(density(log.X1st.Flr.SF, na.rm = TRUE))
+
+par(mfrow = c(1,2))
+hist(X1st.Flr.SF,freq = FALSE)
+lines(density(X1st.Flr.SF, na.rm = TRUE))
+hist(log.X1st.Flr.SF, freq = FALSE, ylim = c(0,1.25))
+lines(density(log.X1st.Flr.SF, na.rm = TRUE))
+
+
+```
+
+I would use a log transformation with this variable because the data are clearly right skewed, and the log doesn't necessarily take care of it completely.  There still seems to be some skew after the transformation, but it is significantly better.
+
+```{r}
+par(mfrow = c(1,2))
+boxplot(X2nd.Flr.SF, main = "X2nd.Flr.SF")
+hist(X2nd.Flr.SF,freq = FALSE)
+lines(density(X2nd.Flr.SF, na.rm = TRUE))
+without.0 = X2nd.Flr.SF[X2nd.Flr.SF > 0]
+log.X2nd.Flr.SF = log(X2nd.Flr.SF + 1)
+hist(without.0)
+par(mfrow = c(1,2))
+boxplot(log.X2nd.Flr.SF,main = "log(X2nd.Flr.SF)")
+hist(log.X2nd.Flr.SF, freq = FALSE, main = "log(X2nd.Flr.SF)")
+lines(density(log.X2nd.Flr.SF, na.rm = TRUE))
+
+par(mfrow = c(1,2))
+hist(X2nd.Flr.SF,freq = FALSE)
+lines(density(X2nd.Flr.SF, na.rm = TRUE))
+hist(log.X2nd.Flr.SF, freq = FALSE, ylim = c(0,1.25))
+lines(density(log.X2nd.Flr.SF, na.rm = TRUE))
+
+
+```
+
+These data are not normal.  If we look at this, the largest chunk is at zero, which would be indicative of a home without a second floor.  If we exclude that, then the data seem to be fairly normal, and we could definitely use a transformation to get the data normally distributed.  That would probably be might technique for dealing with this data.  I would create an indicator variable that describes whether the house has a second floor and then provide that value for the house.
+
+```{r}
+par(mfrow = c(1,2))
+boxplot(Total.Bsmt.SF, main = "Total.Bsmt.SF")
+hist(Total.Bsmt.SF,freq = FALSE)
+lines(density(Total.Bsmt.SF, na.rm = TRUE))
+without.0.base = Total.Bsmt.SF[Total.Bsmt.SF > 0]
+hist(without.0.base)
+par(mfrow = c(1,2))
+log.Total.Bsmt.SF = log(Total.Bsmt.SF + 1)
+boxplot(log.Total.Bsmt.SF,main = "log(Total.Bsmt.SF)")
+hist(log.Total.Bsmt.SF, freq = FALSE, main = "log(Total.Bsmt.SF)")
+lines(density(log.Total.Bsmt.SF, na.rm = TRUE))
+
+par(mfrow = c(1,2))
+hist(Total.Bsmt.SF,freq = FALSE)
+lines(density(Total.Bsmt.SF, na.rm = TRUE))
+hist(log.Total.Bsmt.SF, freq = FALSE, ylim = c(0,1.25))
+lines(density(log.Total.Bsmt.SF, na.rm = TRUE))
+
+
+```
+
+This seems like a less extreme version of the previous variable.  I would probably do a similar transformation with an indicator variable because the log does nothing in its current state.  It is clear that there are enough zero values to make a difference.  However, it isn't as extreme as the previous variable.
+
+```{r}
+par(mfrow = c(1,2))
+boxplot(Lot.Area, main = "Lot.Area")
+hist(Lot.Area,freq = FALSE)
+lines(density(Lot.Area, na.rm = TRUE))
+par(mfrow = c(1,2))
+log.Lot.Area = log(Lot.Area + 1)
+boxplot(log.Lot.Area,main = "log(Lot.Area)")
+hist(log.Lot.Area, freq = FALSE, main = "log(Lot.Area)")
+lines(density(log.Lot.Area, na.rm = TRUE))
+
+par(mfrow = c(1,2))
+hist(Lot.Area,freq = FALSE)
+lines(density(Lot.Area, na.rm = TRUE))
+hist(log.Lot.Area, freq = FALSE, ylim = c(0,1.25))
+lines(density(log.Lot.Area, na.rm = TRUE))
+```
+
+These data are very right skewed.  The log transformation at least makes the distribution more symmetric, but it still doesn't look very normal.  This makes sense because most lots will be comparable, but there are also homes on ranches or farms where there are many acres of land.  A log will help in this case, but it's also important to note that the log distribution although symmetric doesn't necessarily look normal.
+
+## Part B
+```{r}
+lm.sale = lm(price ~ Sale.Condition)
+par(mfrow = c(2,2))
+plot(lm.sale)
+```
+
+It seems clear that the assumption of constant variance don't apply.  The variance for each of the levels is significantly different, as we can see by the 
+
+## Part C
+```{r}
+ames_train <- ames_train %>%
+  filter(Sale.Condition == "Normal")
+
+X = cbind(area,Garage.Area,X1st.Flr.SF,X2nd.Flr.SF,Total.Bsmt.SF,Lot.Area)
+data.cont = as.data.frame(cbind(price,X))
+lm.norm = lm(price~.,data = data.cont)
+
+par(mfrow = c(2,2))
+boxplot(price, main = "Price")
+hist(price,freq = FALSE, ylim = c(0,9e-06))
+lines(density(price))
+boxplot(area, main = "Area")
+hist(area,freq = FALSE)
+lines(density(area))
+boxplot(Garage.Area, main = "Garage.Area")
+hist(Garage.Area,freq = FALSE)
+lines(density(Garage.Area, na.rm = TRUE))
+boxplot(X1st.Flr.SF, main = "X1st.Flr.SF")
+hist(X1st.Flr.SF,freq = FALSE)
+lines(density(X1st.Flr.SF, na.rm = TRUE))
+boxplot(X2nd.Flr.SF, main = "X2nd.Flr.SF")
+hist(X2nd.Flr.SF,freq = FALSE)
+lines(density(X2nd.Flr.SF, na.rm = TRUE))
+boxplot(Total.Bsmt.SF, main = "Total.Bsmt.SF")
+hist(Total.Bsmt.SF,freq = FALSE)
+lines(density(Total.Bsmt.SF, na.rm = TRUE))
+boxplot(Lot.Area, main = "Lot.Area")
+hist(Lot.Area,freq = FALSE)
+lines(density(Lot.Area, na.rm = TRUE))
+
+# Transformations
+log.price = log(price)
+log.area = log(area)
+log.Garage.Area = log(Garage.Area + 1)
+log.X1st.Flr.SF = log(X1st.Flr.SF)
+log.X2nd.Flr.SF = log(X2nd.Flr.SF + 1)
+log.Total.Bsmt.SF = log(Total.Bsmt.SF + 1)
+log.Lot.Area = log(Lot.Area + 1)
+
+hist(price,freq = FALSE, ylim = c(0,9e-06))
+lines(density(price))
+hist(log.price, freq = FALSE, ylim = c(0,1.25))
+lines(density(log.price))
+hist(area,freq = FALSE)
+lines(density(area))
+hist(log.area, freq = FALSE, ylim = c(0,1.25))
+lines(density(log.area))
+hist(Garage.Area,freq = FALSE)
+lines(density(Garage.Area, na.rm = TRUE))
+hist(log.Garage.Area, freq = FALSE, ylim = c(0,1.25))
+lines(density(log.Garage.Area, na.rm = TRUE))
+hist(X1st.Flr.SF,freq = FALSE)
+lines(density(X1st.Flr.SF, na.rm = TRUE))
+hist(log.X1st.Flr.SF, freq = FALSE, ylim = c(0,1.25))
+lines(density(log.X1st.Flr.SF, na.rm = TRUE))
+hist(X2nd.Flr.SF,freq = FALSE)
+lines(density(X2nd.Flr.SF, na.rm = TRUE))
+hist(log.X2nd.Flr.SF, freq = FALSE, ylim = c(0,1.25))
+lines(density(log.X2nd.Flr.SF, na.rm = TRUE))
+hist(Total.Bsmt.SF,freq = FALSE)
+lines(density(Total.Bsmt.SF, na.rm = TRUE))
+hist(log.Total.Bsmt.SF, freq = FALSE, ylim = c(0,1.25))
+lines(density(log.Total.Bsmt.SF, na.rm = TRUE))
+hist(Lot.Area,freq = FALSE)
+lines(density(Lot.Area, na.rm = TRUE))
+hist(log.Lot.Area, freq = FALSE, ylim = c(0,1.25))
+lines(density(log.Lot.Area, na.rm = TRUE))
+```
+
+After filtering the data to just get the normal sale types, I would actually probably use the same transformations. I might perform some more box cox transformations
+
+# Question 2
+
+I propose two gamma distributions because those ensure a positive support.  I also center those priors on the MLE
+s for both $v$ and $k$.  So $k \sim gamma(.608,4)$ and $v \sim gamma(66.652,4)$.  This prior ensures that both of these values are positive, and they will be centered around these values.
+```{r}
+x = c(2,4,6,8,10,24,28, 32)
+y = c(1.63, 1.01, .73, .55, .41, .01, .06, .02)
+
+conc.lm = lm(I(log(y) - log(30)) ~ x)
+
+vhat = exp(-coef(conc.lm)[1])
+khat = -coef(conc.lm)[2]
+
+v.sims = rgamma(10000,66.652,4)
+k.sims = rgamma(10000,.608,4)
+
+mu.func = function(x,V,k){
+  return((30/V)*exp(-k*x))
+}
+simulation = NULL
+
+for(i in 1:length(x)){
+  simulation = c(simulation, mu.func(x[i],v.sims,k.sims))
+}
+hist(simulation)
+
+```
+
+These seem like reasonable values for the data. This makes me think that we can proceed with the model.
+
+## Part B
+
+```{r, cache = TRUE}
+n = length(x)
+data = list(y = y, x=x)
+data$n = n
+data$D = 30
+
+gamma.model = function(){
+  
+    v ~ dgamma(66.652,4)
+    k ~ dgamma(.608,4)
+  for(i in 1:n) {
+    mu[i] <- 30/v * exp(- k * x[i])
+    y[i] ~ dnorm(mu[i], phi)
+    }
+    phi <- sigma^(-2)
+    sigma ~ dgamma(1e-6,1e-6)
+    halflife <- log(2) / k
+    vk <- v * k
+}
+
+parms = c("v","k", "phi","sigma", "vk", "halflife")
+
+data = list(y=y, x=x,  n=length(y), D=30)
+
+
+out.gamma = jags(model = gamma.model, data=data, param=parms, n.iter=50000, n.burnin=5000)
+
+
+#model= function() {
+#
+#    v ~ dt(0, phi, 1)%_% T(0,)
+#    k ~ dt(0,phi, 1)%_% T(0,)
+#    b ~ dwish(I, 1)
+#    R ~ dwish(I, 1)
+#    lambda ~ dgamma(1/2, 1/2)
+#    for (i in 1:n) {
+#      mu[i] <- D/v * exp(- k * x[i])
+#      y[i] ~ dnorm(mu[i], phi)
+#    }
+#    phi <- pow(sigma, -2)
+#    sigma ~ dt(0.00000E+00, 1, 1) %_% T(0.00000E+00, )
+#    cl <- v*k
+#    t.5 <- log(2)/k
+#}
+#model.file= "nlnmodel"
+#write.model(model, model.file)
+#data = list(y=y, x=x,  n=length(y), D=30)
+
+#out = jags(model.file=model.file, data=data, param=c("v","k","cl","t.5", "sigma"), n.iter=30000, n.burnin=5000)
+
+```
+
+```{r}
+#gamma.sims = out.gamma$BUGSoutput$sims.matrix
+gamma.sims = as.mcmc(out.gamma)
+gamma.chains = as.matrix(gamma.sims)
+
+plot(density(gamma.chains[,"k"]), main = "Posterior k")
+lines(density(k.sims), col = "red")
+
+plot(density(gamma.chains[,"v"]), main = "Posterior V")
+lines(density(v.sims),col = "red")
+
+plot(density(gamma.chains[,"halflife"]),main = "Posterior Half Life")
+
+apply(gamma.chains,2,quantile,c(.025,.975))
+
+conc.lm = lm(I(log(y) - log(30)) ~ x)
+
+vhat = exp(-coef(conc.lm)[1])
+khat = -coef(conc.lm)[2]
+
+
+df = data.frame(y=y, x=x)
+logconc.nlm = nls( log(y) ~ log((30/V)*exp(-k*x)), data=df, start=list(V=vhat, k=khat))
+summary(logconc.nlm)
+
+conc.nlm = nls( y ~ (30/V)*exp(-k*x), data=df, start=list(V=vhat, k=khat))
+summary(conc.nlm)
+confint(conc.nlm)
+```
+
+These are ery similar to the frequentist methods we discussed previously.  We can also wee using these plots that our prior probaly wasn't the best.

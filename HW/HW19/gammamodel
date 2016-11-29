@@ -1,0 +1,15 @@
+model
+{
+    v ~ dgamma(66.652, 4)
+    k ~ dgamma(0.608, 4)
+    for (i in 1:n) {
+        mu[i] <- 30/v * exp(-k * x[i])
+        y[i] ~ dnorm(mu[i], phi)
+    }
+    phi <- sigma^{
+        -2
+    }
+    sigma ~ dgamma(1.00000E-06, 1.00000E-06)
+    halflife <- log(2)/k
+    vk <- v * k
+}
