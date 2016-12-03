@@ -1,0 +1,172 @@
+---
+title: "final_project_ideas_outline"
+author: "Zach White"
+date: "12/1/2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(R2jags)
+library(dplyr)
+library(MASS)
+library(ggplot2)
+library(car)
+require(leaps)
+setwd("/home/grad/zmw5/Fall 2016/STA 721/STA_721/final_project")
+load("ames_train.Rdata")
+```
+
+This is where I will compose my initial thoughts
+
+# Prompt
+
+What are the most important predictors of the sale price of a home?  Is it truely "location, location, location", does "size really matter" or more?    You will explore this in the takehome data analysis that we started in the last Homework Assignment where you considered transformations with a subset of predictors.
+
+Using the data set ames_train.Rdata (see attachment)  develop a predictive model to predict sale prices of houses using any subset(s) of the predictors.  You should limit your methods to topics that we have covered in this course (no random forests please), downloading of extra packages (unless they are for graphics/presentation) or googling for answers.    You may want to consider transforming variables (predictors or response), explore outliers, heavy tailed errors, variable selection, model averaging, shrinkage estimators etc.  using any graphical methods to help justify choices to come up with what you think are the best predictive methods.   Narrow your possible methods down to a mimimum of two approaches for comparison.   (Note you do not need to use all of the variables and it is OK if you do some pre-selection to reduce the number of variables to a managible size for computational purposes).  Note there is no single right answer!   
+
+For a minimum of two promising methods, predict sale price for houses in the held-out data ames_test.Rdata (attached) and compare the root MSE for prediction on the training data and test data, where
+
+$\sqrt(\sum_i (Y_i - \hat{Y}_i)^2 /2)$
+
+ 
+
+Are the methods that are best in terms of RMSE on the training data the best on the test data?  Are they close suggesting that the method is well calibrated or is the RMSE much much smaller on the training data suggesting overfitting?  Are there any houses or groups of houses where the predictive model does not predict well?   If that suggests stratifying the model or adding other variables, continue with model building and refinement, but being careful about overfitting.  Summarize your findings as follows.
+
+ 
+
+Report Guidelines  (max 2 pages text 1 page figures/tables).   Supplemental code/output max of 10 pages
+
+The report for your analysis  should be type written (Knitr/Rmarkdown is preferable) with the following sections:
+
+(3 points) Brief introduction to the problem and goals, and any important summaries of the data that may be relevant. 
+
+(8 points) Description of methods that you used (1/2 to 1 page). Note you do not need to provide an exhaustive description of everything that you did, but enough details and justification for the 2 methods that you followed up for prediction.  If you omitted points as outliers or decided to use say just the subset of normal sales for example, or left our variables due to NAs or limited your choice to a subset of varialbes for subsequent model fitting, please provide justification.  Your goal is to make your description reproducible for another reader.  Details of code and output for the two methods may be included in a supplement, but the reader should not have to go the supplemant for important information, which should be in the body of the report. 
+
+(10 points) Briefly describe highlights of the selected method/model(s) and their predictive performance.  What variables/features are important?  Comment on any interesting findings or differences among the methods?  Which neighboorhoods are the hardest to predict?  Are there other groups of homes that are hard to predict or outliers?  Does adding a pool lead to a higher sale price or are garages better investments? (etc)  Include any interesting graphs that may help to tell your story.    Are there any advantages of one method over another?  (computational speed versus performance?)  Disadvantages?  Where possible convey not just point estimates but interval estimates for uncertainty where relevant.
+
+(3 points) Provide an overall summary of findings with your recommendation of method and variables, conclusions and what you might do if you had more time.
+
+(6 points) Supplemental Code:  Add any R code/output here that is relevant for the report and justifying choices.  Remember you do not need to include everything that you did if you decided not to use it in the end!   Points are for conciseness, organization, brief comments for readibility.  Points take off for including material that is not relevant.
+
+ 
+
+Finally you should write a function/code that will take as input a new validation data set and output predictions. (you will  upload this separately).  It should have all of the information needed to make predictions when run in a new workspace.
+
+ 
+
+Note on Help:
+
+You may not give or receive help from anyone other than the instructor or TA's.   We can answer qustions about theory, methodology, implementations or code but the analysis should be your own.  You should not ask or search for help on other forums, except for the course piazza site.  We may not be able to answer all questions.   
+
+# Outline
+
+First, transformations.
+Outliers = Bayesian model averaging, and other methods
+Heavy tailed errors = bounded influence with JAGS.
+Variable selection = which algorithm would be best.  BMA, BAS
+Shrinkage? I think I should definitely compare whatever I do with Lasso and the like
+Prediction stuff
+Two approachse for comparison.  I think I should eliminate some variables beforehand
+Writeup
+
+Exploring some data
+```{r}
+dim(ames_train)
+names(ames_train)
+unique(ames_train$PID)
+
+ames_train %>%
+  group_by(Overall.Cond) %>%
+  summarise(min_price = min(price),q1 = quantile(price,.25),med.price = quantile(price,.5),mean.price = mean(price),q3 = quantile(price,.75), max.price = max(price))
+
+# Overall Quality seems like it could be of value.
+ames_train %>%
+  group_by(Overall.Qual) %>%
+  summarise(min_price = min(price),q1 = quantile(price,.25),med.price = quantile(price,.5),mean.price = mean(price),q3 = quantile(price,.75), max.price = max(price))
+
+ames_train %>%
+  group_by(Kitchen.Qual) %>%
+  summarise(min_price = min(price),q1 = quantile(price,.25),med.price = quantile(price,.5),mean.price = mean(price),q3 = quantile(price,.75), max.price = max(price))
+
+y = ames_train$price
+ames_train[is.na(ames_train[,"Lot.Frontage"]),] = 0
+indices = c(2,6)
+X = ames_train[,indices]
+
+
+vif(allrate.lm)
+## Perform Best Subset Variable Selection
+forward.var.selection <- regsubsets(price~.,method="forward",nvmax = 20,data=ames_train)
+plot(forward.var.selection)
+forward.summary <- summary(forward.var.selection)
+backward.var.selection <- regsubsets(quality~.,method="backward",nvmax=12,data=rate)
+```
+
+Actually making the data work
+
+```{r}
+y = ames_train$price
+indices = c(2,6,7,18,20,21,22,23,30,31,33,34,37,39,40,41,42,43,44,46,47,49,50:56,58,59,63,64,65,66,78,79)
+X = ames_train[,indices]
+names(X)
+
+#Preprocessing
+X$Bldg.Type  = as.character(X$Bldg.Type)
+X$Exter.Cond = as.character(X$Exter.Cond)
+X$Exter.Qual = as.character(X$Exter.Qual)
+X$Central.Air = as.character(X$Central.Air)
+X$Bsmt.Cond = as.character(X$Bsmt.Cond)
+X$Bsmt.Qual = as.character(X$Bsmt.Qual)
+X$Heating = as.character(X$Heating)
+X$Heating.QC = as.character(X$Heating.QC)
+X$Kitchen.Qual = as.character(X$Kitchen.Qual)
+X$Fireplace.Qu = as.character(X$Fireplace.Qu)
+X$Garage.Qual = as.character(X$Garage.Qual)
+X$Garage.Cond = as.character(X$Garage.Cond)
+
+## This is the key
+X[X == "Ex"] = 5
+X[X == "Gd"] = 4
+X[X == "TA"] = 3
+X[X == "Fa"] = 2
+X[X == "Po"] = 1
+X$Heating[is.na(X$Heating)] = 0
+X$Central.Air[is.na(X$Central.Air)] = 0
+X[is.na(X)] = 0
+
+X$Bldg.Type  = as.factor(X$Bldg.Type)
+X$Exter.Cond = as.factor(X$Exter.Cond)
+X$Exter.Qual = as.factor(X$Exter.Qual)
+X$Bsmt.Cond = as.factor(X$Bsmt.Cond)
+X$Bsmt.Qual = as.factor(X$Bsmt.Qual)
+X$Central.Air = as.factor(X$Central.Air)
+X$Heating = as.factor(X$Heating)
+X$Heating.QC = as.factor(X$Heating.QC)
+X$Kitchen.Qual = as.factor(X$Kitchen.Qual)
+X$Fireplace.Qu = as.factor(X$Fireplace.Qu)
+X$Garage.Qual = as.factor(X$Garage.Qual)
+X$Garage.Cond = as.factor(X$Garage.Cond)
+
+  
+factors = c("Bldg.Type","Exter.Cond","Exter.Qual","Bsmt.Cond","Bsmt.Qual","Heating","Heating.QC","Kitchen.Qual","Fireplace.Qu","Garage.Qual","Garage.Cond")
+X.fact = X[,factors]
+sapply(X.fact,unique, useNA = "always") 
+apply(sapply(X.fact,is.na),2,sum)
+apply(sapply(X,is.na),2,sum)
+
+
+
+# The data should be good
+
+sapply(X,class)
+# I now proceed to go over the NA values.
+X$Bsmt.Qual = as.character(X$Bsmt.Qual)
+X$Bsmt.Qual[X$Bsmt.Qual == "<NA>"]
+# Basic
+modelling.data = as.data.frame(cbind(Y,X))
+forward.var.selection <- regsubsets(price~.,method="forward",nvmax = 20,data=modelling.data)
+plot(forward.var.selection)
+forward.summary <- summary(forward.var.selection)
+backward.var.selection <- regsubsets(quality~.,method="backward",nvmax=12,data=rate)
+```

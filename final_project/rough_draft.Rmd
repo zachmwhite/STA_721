@@ -1,0 +1,12 @@
+---
+title: "Final_thoughts"
+author: "Zach White"
+date: "12/1/2016"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This is where I will compose a more comprehensive and final version of my thoughts on the final project
