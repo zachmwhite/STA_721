@@ -13,8 +13,14 @@ library(MASS)
 library(ggplot2)
 library(car)
 require(leaps)
-setwd("/home/grad/zmw5/Fall 2016/STA 721/STA_721/final_project")
+library(BMA)
+library(BAS)
+# Online
+# setwd("/home/grad/zmw5/Fall 2016/STA 721/STA_721/final_project")
+# On machine
+setwd("C:/Users/Zachary/Desktop/Fall 2016/STA 721/STA_721/final_project")
 load("ames_train.Rdata")
+
 ```
 
 This is where I will compose my initial thoughts
@@ -74,7 +80,7 @@ Exploring some data
 ```{r}
 dim(ames_train)
 names(ames_train)
-unique(ames_train$PID)
+#unique(ames_train$PID)
 
 ames_train %>%
   group_by(Overall.Cond) %>%
@@ -149,20 +155,20 @@ X$Garage.Qual = as.factor(X$Garage.Qual)
 X$Garage.Cond = as.factor(X$Garage.Cond)
 
   
-factors = c("Bldg.Type","Exter.Cond","Exter.Qual","Bsmt.Cond","Bsmt.Qual","Heating","Heating.QC","Kitchen.Qual","Fireplace.Qu","Garage.Qual","Garage.Cond")
-X.fact = X[,factors]
-sapply(X.fact,unique, useNA = "always") 
-apply(sapply(X.fact,is.na),2,sum)
+#factors = c("Bldg.Type","Exter.Cond","Exter.Qual","Bsmt.Cond","Bsmt.Qual","Heating","Heating.QC","Kitchen.Qual","Fireplace.Qu","Garage.Qual","Garage.Cond")
+#X.fact = X[,factors]
+#sapply(X.fact,unique, useNA = "always") 
+#apply(sapply(X.fact,is.na),2,sum)
 apply(sapply(X,is.na),2,sum)
 
 
 
 # The data should be good
 
-sapply(X,class)
+#sapply(X,class)
 # I now proceed to go over the NA values.
-X$Bsmt.Qual = as.character(X$Bsmt.Qual)
-X$Bsmt.Qual[X$Bsmt.Qual == "<NA>"]
+#X$Bsmt.Qual = as.character(X$Bsmt.Qual)
+#X$Bsmt.Qual[X$Bsmt.Qual == "<NA>"]
 # Basic
 modelling.data = as.data.frame(cbind(Y,X))
 forward.var.selection <- regsubsets(price~.,method="forward",nvmax = 20,data=modelling.data)
@@ -170,3 +176,299 @@ plot(forward.var.selection)
 forward.summary <- summary(forward.var.selection)
 backward.var.selection <- regsubsets(quality~.,method="backward",nvmax=12,data=rate)
 ```
+
+Transformations
+```{r}
+modelling.data = as.data.frame(cbind(y,X))
+initial.model = lm(y~.,data = modelling.data)
+X.mat = model.matrix(initial.model)
+sum(is.na(modelling.data))
+#X$Total.Bsmt.SF
+par(mfrow = c(2,2))
+plot(initial.model)
+
+# Box Cox Transform
+bc = boxcox(initial.model)
+lambda = bc$x[which.max(bc$y)]
+bc.mat = modelling.data %>% mutate(bc_y = (y^lambda-1) / lambda) %>% dplyr::select(-y)
+box.model = lm(bc_y~.,data = bc.mat)
+par(mfrow = c(2,2))
+plot(box.model)
+
+# log transform
+log.y = log(y)
+log.mat = as.data.frame(cbind(log.y,X))
+log.model = lm(log.y~.,data = log.mat)
+par(mfrow = c(2,2))
+plot(log.model)
+
+```
+
+The obsevations that have leverage one: 
+Boxcox: 111, 128, 216, 434, 470, 516, 793, 913, 949.  The boxcox transformation doesn't change that.
+Log: 111, 128, 216, 434, 470, 516, 793, 913, 949
+
+
+I perform a boxcox transformation with $\lambda = .26$ on the response variable price.  I will use the same log transformations from the previous assignment, and I will try to figure out a way to reconcile the ones that I couldn't figure out last time.
+
+```{r}
+par(mfrow = c(2,2))
+#Area
+log.area = log(bc.mat$area)
+bc.mat$log.area = log.area
+index.area = which(colnames(bc.mat) == "area")
+bc.mat = bc.mat[,-index.area]
+# X1st.Flr.SF
+log.X1st.Flr.SF = log(bc.mat$X1st.Flr.SF)
+bc.mat$log.X1st.Flr.SF = log.X1st.Flr.SF
+index.X1st = which(colnames(bc.mat) == "X1st.Flr.SF")
+bc.mat=bc.mat[,-index.X1st]
+# X2nd.Flr.SF
+# I proposed an indicator variable with this, but I'm having second thoughts.
+
+# Total.Bsmt.SF
+
+# Lot Area
+log.lot.area = log(bc.mat$Lot.Area)
+bc.mat$log.log.area = log.lot.area
+index.lot = which(colnames(bc.mat) == "Lot.Area")
+bc.mat = bc.mat[,-index.lot]
+
+# New linear models and look for outliers
+transformed.data = as.data.frame(bc.mat)
+transform.model = lm(bc_y~.,data = transformed.data)
+transform.mat = model.matrix(transform.model)
+par(mfrow = c(2,2))
+plot(transform.model,id.n = 50)
+
+# I guess I still need to do the transformations because I didn't update them in my data.
+```
+The model is still not plotting observations: 111, 216, 434, 470, 516, 793, 913, 949.  So the transformations only take care of one of the previous points: 128.  Also, it seems like observation 1 has a leverage of 1.
+
+```{r}
+prob.obs = c(111,128,216,434,470,516,793,913,949)
+X[prob.obs,]
+```
+Outlier Stuff: BAS, BMA, MC3Reg, Bounded Influence
+
+```{r} 
+im = influence.measures(transform.model)
+
+plot(rstudent(transform.model) ~ hatvalues(transform.model), ylab="Externally Studentized Residual", xlab="Leverage", xlim = c(0,1))
+with(transform.model, text(rstudent(transform.model)~hatvalues(transform.model), labels = names(rstudent(transform.model)), pos = 4))
+
+p.val = 2*(1- pt(max(abs(rstudent(transform.model)), na.rm = TRUE), transform.model$df - 1))
+bon = .05/nrow(X)
+p.val < bon
+
+# MC3.Reg
+bc.index = which(colnames(bc.mat) == "bc_y" )
+transformed.mat = as.matrix(transformed.data)
+house.MC3= MC3.REG(transformed.mat[,bc.index], transformed.mat[,-bc.index]
+  ,num.its=10000, outliers=TRUE, outs.list=1:20, M0.var=rep(TRUE, ncol(transformed.data)-1))
+# Look up the help function
+# Use the Box cox transformation
+# With BMA.  I need to figure out how to block out the coresponding 
+
+
+summary(stack.MC3)
+detach(stackloss)
+
+# BAS with two different priors
+n = nrow(stackloss)
+stack.out = cbind(stackloss, diag(n))  #add indicators 
+
+BAS.stack.beta = bas.lm(stack.loss ~ ., 
+                   data=stack.out,
+                   prior="hyper-g-n", a=3,
+                   modelprior=tr.beta.binomial(1, 1, 15), 
+                   method="MCMC",
+                   MCMC.iterations =50000)
+BAS.stack.pois = bas.lm(stack.loss ~ ., 
+                   data=stack.out,
+                   prior="hyper-g-n", a=3,
+                   modelprior=tr.poisson(4, 15),
+                   method="MCMC",
+                   MCMC.iterations =50000)
+
+par(mfrow = c(2,2))
+diagnostics(BAS.stack.beta, type="pip")
+diagnostics(BAS.stack.beta, type="model")
+
+diagnostics(BAS.stack.pois,type = "pip")
+diagnostics(BAS.stack.pois, type = "model")
+```
+
+```{r}
+# HW 18.  Review
+n = nrow(stackloss)
+## scale X such that X^TX has ones on the diagonal; 
+## scale divides by the standard deviation so we need
+## to divide by the sqrt(n-1) 
+scaled.X = scale(as.matrix(stackloss[, -4]))/sqrt(n-1)
+t(scaled.X) %*% scaled.X
+data = list(Y = stackloss$stack.loss, X=scaled.X, p=ncol(scaled.X))
+data$n = n   #check
+
+data$scales = attr(scaled.X, "scaled:scale")*sqrt(n-1) # fix scale
+data$Xbar = attr(scaled.X, "scaled:center")
+
+# define a function that returns the Model 
+  rr.model = function() {
+    a  <- 9
+    shape <- a/2
+    delta <- 6
+    delta.shape <- delta / 2
+    
+    for (i in 1:n) {
+      mu[i] <- alpha0 + inprod(X[i,], alpha)
+      lambda[i] ~ dgamma(shape, shape)
+      prec[i] <- phi*lambda[i]
+      Y[i] ~ dnorm(mu[i], prec[i])
+    }
+    phi ~ dgamma(1.0E-6, 1.0E-6)
+    alpha0 ~ dnorm(0, 1.0E-6)
+    
+    for (j in 1:p) {
+      prec.beta[j] <- lambda.beta[j]*phi
+      alpha[j] ~ dnorm(0, prec.beta[j])
+      beta[j] <- alpha[j]/scales[j] 
+      lambda.beta[j] ~ dgamma(delta.shape, delta.shape)
+    }
+    
+    beta0 <- alpha0 - inprod(beta[1:p], Xbar)
+    sigma <- pow(phi, -.5)
+  }
+  
+  
+  parameters = c("beta0", "beta", "sigma","lambda.beta", "lambda")
+  
+  
+  bf.sim = jags(data, inits=NULL, par=parameters, model=rr.model,  n.iter=10000)
+
+
+bf.bugs = as.mcmc(bf.sim$BUGSoutput$sims.matrix)  # create an MCMC object 
+
+apply(bf.bugs,2,quantile,c(.025,.975))
+boxplot(as.matrix(bf.bugs[,c(6:26)]))
+
+a.vec = c(5,10,15,20)
+delta.vec = c(2,7,12,17)
+nreps = 3000
+mcmc.array = array(0, c(4,nreps,30))
+
+for(i in 1:length(a.vec)){
+# Create a data list with inputs for JAGS
+a = a.vec[i]
+delta = delta.vec[i]
+n = nrow(stackloss)
+## scale X such that X^TX has ones on the diagonal; 
+## scale divides by the standard deviation so we need
+## to divide by the sqrt(n-1) 
+scaled.X = scale(as.matrix(stackloss[, -4]))/sqrt(n-1)
+t(scaled.X) %*% scaled.X
+data = list(Y = stackloss$stack.loss, X=scaled.X, p=ncol(scaled.X))
+data$n = n   #check
+data$a = a
+data$delta = delta
+
+data$scales = attr(scaled.X, "scaled:scale")*sqrt(n-1) # fix scale
+data$Xbar = attr(scaled.X, "scaled:center")
+
+# define a function that returns the Model 
+  rr.model = function() {
+    shape <- a/2
+    delta.shape <- delta / 2
+    
+    for (i in 1:n) {
+      mu[i] <- alpha0 + inprod(X[i,], alpha)
+      lambda[i] ~ dgamma(shape, shape)
+      prec[i] <- phi*lambda[i]
+      Y[i] ~ dnorm(mu[i], prec[i])
+    }
+    phi ~ dgamma(1.0E-6, 1.0E-6)
+    alpha0 ~ dnorm(0, 1.0E-6)
+    
+    for (j in 1:p) {
+      prec.beta[j] <- lambda.beta[j]*phi
+      alpha[j] ~ dnorm(0, prec.beta[j])
+      beta[j] <- alpha[j]/scales[j] 
+      lambda.beta[j] ~ dgamma(delta.shape, delta.shape)
+    }
+    
+    beta0 <- alpha0 - inprod(beta[1:p], Xbar)
+    sigma <- pow(phi, -.5)
+  }
+  
+  
+  parameters = c("beta0", "beta", "sigma","lambda.beta", "lambda")
+  
+  
+  bf.sim = jags(data, inits=NULL, par=parameters, model=rr.model,  n.iter=10000)
+
+
+  bf.bugs = as.mcmc(bf.sim$BUGSoutput$sims.matrix)  # create an MCMC object
+  
+  mcmc.array[i,,] = bf.bugs
+}
+
+first = mcmc.array[1,,]
+second = mcmc.array[2,,]
+third = mcmc.array[3,,]
+fourth = mcmc.array[4,,]
+apply(first,2,quantile,c(.025,.975))
+apply(second,2,quantile,c(.025,.975))
+apply(third,2,quantile,c(.025,.975))
+apply(fourth,2,quantile,c(.025,.975))
+boxplot(as.matrix(first[,c(6:26)]))
+boxplot(as.matrix(second[,c(6:26)]))
+boxplot(as.matrix(third[,c(6:26)]))
+boxplot(as.matrix(fourth[,c(6:26)]))
+
+```
+
+```{r}
+
+
+#model= function() {
+#
+#    v ~ dt(0, phi, 1)%_% T(0,)
+#    k ~ dt(0,phi, 1)%_% T(0,)
+#    b ~ dwish(I, 1)
+#    R ~ dwish(I, 1)
+#    lambda ~ dgamma(1/2, 1/2)
+#    for (i in 1:n) {
+#      mu[i] <- D/v * exp(- k * x[i])
+#      y[i] ~ dnorm(mu[i], phi)
+#    }
+#    phi <- pow(sigma, -2)
+#    sigma ~ dt(0.00000E+00, 1, 1) %_% T(0.00000E+00, )
+#    cl <- v*k
+#    t.5 <- log(2)/k
+#}
+#model.file= "nlnmodel"
+#write.model(model, model.file)
+#data = list(y=y, x=x,  n=length(y), D=30)
+
+#out = jags(model.file=model.file, data=data, param=c("v","k","cl","t.5", "sigma"), n.iter=30000, n.burnin=5000)
+
+parms = c("v","k", "phi","sigma", "vk", "halflife")
+
+data = list(y=y, x=x,  n=length(y), D=30)
+
+
+out.gamma = jags(model = gamma.model, data=data, param=parms, n.iter=50000, n.burnin=5000)
+
+
+```
+
+```{r}
+#Classic Lasso, Ridge, Horseshoe
+
+```
+
+Linear Model
+
+Outlier Detection with all the procedures
+
+Actual Model stuff
