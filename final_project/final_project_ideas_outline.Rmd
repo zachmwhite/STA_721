@@ -16,9 +16,9 @@ require(leaps)
 library(BMA)
 library(BAS)
 # Online
-setwd("/home/grad/zmw5/Fall 2016/STA 721/STA_721/final_project")
+#setwd("/home/grad/zmw5/Fall 2016/STA 721/STA_721/final_project")
 # On machine
-#setwd("C:/Users/Zachary/Desktop/Fall 2016/STA 721/STA_721/final_project")
+setwd("C:/Users/Zachary/Desktop/Fall 2016/STA 721/STA_721/final_project")
 load("ames_train.Rdata")
 
 ```
@@ -230,18 +230,18 @@ bc.mat=bc.mat[,-index.X1st]
 
 # Lot Area
 log.lot.area = log(bc.mat$Lot.Area)
-bc.mat$log.log.area = log.lot.area
+bc.mat$log.lot.area = log.lot.area
 index.lot = which(colnames(bc.mat) == "Lot.Area")
 bc.mat = bc.mat[,-index.lot]
 
 # New linear models and look for outliers
 transformed.data = as.data.frame(bc.mat)
-transform.model = lm(bc_y~.,data = transformed.data)
+transform.model = lm(bc_y~-1+.,data = transformed.data)
 transform.mat = model.matrix(transform.model)
 par(mfrow = c(2,2))
 plot(transform.model,id.n = 50)
 
-# I guess I still need to do the transformations because I didn't update them in my data.
+
 ```
 The model is still not plotting observations: 111, 216, 434, 470, 516, 793, 913, 949.  So the transformations only take care of one of the previous points: 128.  Also, it seems like observation 1 has a leverage of 1.
 
@@ -252,6 +252,11 @@ X[prob.obs,]
 Outlier Stuff: BAS, BMA, MC3Reg, Bounded Influence
 
 ```{r} 
+XtX = t(transform.mat) %*% transform.mat
+head(transform.mat)
+transform.mat = as.data.frame(transform.mat)
+cont.index = which(apply(transform.mat,2,max) > 1)
+X.scaled = scale(transform.mat)
 im = influence.measures(transform.model)
 
 plot(rstudent(transform.model) ~ hatvalues(transform.model), ylab="Externally Studentized Residual", xlab="Leverage", xlim = c(0,1))
@@ -472,6 +477,49 @@ out.gamma = jags(model = gamma.model, data=data, param=parms, n.iter=50000, n.bu
 ```{r}
 #Classic Lasso, Ridge, Horseshoe
 
+  y = transformed.data$bc_y
+  X = as.matrix(transform.mat)
+  XtX.inv = solve(t(X) %*% X)
+  MSE.pred[i] = sigma^2 * sum(diag(XtX.inv))
+  nk.ols = lm(Y ~ ., data=df)
+  coef.ols = coef(nk.ols)
+  MSE.OLS[i] = sum((betatrue - coef.ols)^2)
+  bias.ols[i] =sum((betatrue - coef.ols))
+  ## Lasso
+  pre.lass = cv.glmnet(X,Y,alpha = 1)
+  best.lam.lass = pre.lass$lambda.min
+  lass.mod = glmnet(X,Y,lambda = best.lam.lass)
+  lass.coefs = coef(lass.mod)
+  mse.lasso[i] = sum((betatrue - lass.coefs)^2)
+  bias.lasso[i] = sum((betatrue - lass.coefs))
+  ## Ridge
+  pre.ridge = cv.glmnet(X,Y,alpha = 0)
+  best.lam.ridge = pre.ridge$lambda.min
+  ridge.mod = glmnet(X,Y,alpha = 0, lambda = best.lam.ridge)
+  ridge.coefs = coef(ridge.mod)
+  mse.ridge[i] = sum((betatrue - ridge.coefs)^2)
+  bias.ridge[i] = sum((betatrue - ridge.coefs))
+  ## Horseshoe
+  horse.mod = bhs(X,Y)
+  horse.betas = cbind(horse.mod$mu,horse.mod$beta)
+  horse.coefs = apply(horse.betas,2,mean)
+  mse.horse[i] = sum((betatrue - horse.coefs)^2)
+  bias.horse[i] = sum((betatrue - horse.coefs))
+  
+  ## Hypergeometric
+  bma.hg = bas.lm(Y ~ X , prior = "hyper-g-n", a = 3, n.models = 2^p,modelprior = uniform())
+  coef.bma.hg = coefficients(bma.hg)
+  coef.hma.hg.post = coef.bma.hg$postmean
+  mse.bma.hyper[i] = sum((betatrue - coef.hma.hg.post)^2)
+  bias.bma.hyper[i] = sum((betatrue - coef.hma.hg.post))
+  
+  ## Zellner-Siow
+  bma.zs = bas.lm(Y~X,prior = "ZS-null", a = n, n.models = 2^p,modelprior = uniform())
+  coef.bma.zs = coefficients(bma.zs)
+  coef.bma.zs.post = coef.bma.zs$postmean
+  mse.bma.zs[i] = sum((betatrue - coef.bma.zs.post)^2)
+  bias.bma.zs[i] = sum((betatrue - coef.bma.zs.post))
+}
 ```
 
 Linear Model
