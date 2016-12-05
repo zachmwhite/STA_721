@@ -16,9 +16,9 @@ require(leaps)
 library(BMA)
 library(BAS)
 # Online
-# setwd("/home/grad/zmw5/Fall 2016/STA 721/STA_721/final_project")
+setwd("/home/grad/zmw5/Fall 2016/STA 721/STA_721/final_project")
 # On machine
-setwd("C:/Users/Zachary/Desktop/Fall 2016/STA 721/STA_721/final_project")
+#setwd("C:/Users/Zachary/Desktop/Fall 2016/STA 721/STA_721/final_project")
 load("ames_train.Rdata")
 
 ```
@@ -262,14 +262,21 @@ bon = .05/nrow(X)
 p.val < bon
 
 # MC3.Reg
-bc.index = which(colnames(bc.mat) == "bc_y" )
+# Transformed model matrix
+trans.mod.mat = model.matrix(transform.model)
+tot.trans.mod.mat = cbind(bc.mat$bc_y,trans.mod.mat)
+house.mc3 = MC3.REG(tot.trans.mod.mat[,1],tot.trans.mod.mat[,-1],num.its = 10000,
+                    outliers = TRUE, outs.list = 1:20,M0.var = rep(TRUE, ncol(tot.trans.mod.mat)-1))
+# I don't think this works because we're not blocking the right variables.  PIECE OF CRAP
+
+bc.index = which(colnames(tot.trans.mod.mat)== "bc_y" )
 transformed.mat = as.matrix(transformed.data)
-house.MC3= MC3.REG(transformed.mat[,bc.index], transformed.mat[,-bc.index]
+house.MC3= MC3.REG(transformed.mat[,1], transformed.mat[,-1]
   ,num.its=10000, outliers=TRUE, outs.list=1:20, M0.var=rep(TRUE, ncol(transformed.data)-1))
 # Look up the help function
 # Use the Box cox transformation
 # With BMA.  I need to figure out how to block out the coresponding 
-
+# I need to figure out all the factor stuff.
 
 summary(stack.MC3)
 detach(stackloss)
