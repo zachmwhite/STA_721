@@ -23,26 +23,6 @@ load("ames_train.Rdata")
 load("ames_test.Rdata")
 ```
 
-She mentions location, location, location
-```{r}
-lm.anova = lm(price~Neighborhood,data = ames_train)
-summary(lm.anova)
-anova(lm.anova)
-#predict.lm(lm.anova,ames_test)
-
-# Build Hierarchical Model with location
-ames_train %>% group_by(Neighborhood) %>%
-  summarise(min_price = min(price),q1 = quantile(price,.25),med.price = quantile(price,.5),mean.price = mean(price),q3 = quantile(price,.75), max.price = max(price))
-
-# Levels of Neighborhood
-levels.train = levels(ames_train$Neighborhood)
-levels.test = levels(ames_test$Neighborhood)
-
-levels.train == levels.test
-```
-
-I have an idea where we could use a hierarchical model with Neighborhood as the first level, and some of the more quantitative variables on the second.
-
 
 First step. Get the data in a usable format
 ```{r}
@@ -110,7 +90,7 @@ bc.mat=bc.mat[,-index.X1st]
 
 # Lot Area
 log.lot.area = log(bc.mat$Lot.Area)
-bc.mat$log.log.area = log.lot.area
+bc.mat$log.lot.area = log.lot.area
 index.lot = which(colnames(bc.mat) == "Lot.Area")
 bc.mat = bc.mat[,-index.lot]
 
@@ -133,9 +113,58 @@ for(i in 1:ncol(scaled.mat)){
 y.index = which(names(transformed.data) == "bc.y")
 y.fin = transformed.data[,y.index]
 X.fin = transformed.data[,-y.index]
+
+fin.model = lm(bc.y~-1 + . , data= transformed.data)
+fin.mat = model.matrix(fin.model)
+
+# Taking Garage out
+names(transformed.data)
+garage.index = which(names(transformed.data) == "Garage.Qual" | names(transformed.data) == "Garage.Cond")
+tran.without.gar = transformed.data[,-garage.index]
+
+fin.model = lm(bc.y~-1 + . , data = tran.without.gar)
+
+X.fin = model.matrix(fin.model)
+Xtx.fin = t(X.fin) %*% X.fin
+solve(Xtx.fin)
 ```
+
+Just based on these initial models, it seems like the most important ones are Overall.Qual, Overall.Cond, Year.Built, Exter.Cond3, BsmtFin.SF.1, Bsmt.Fin.SF.2, Bsmt.Unf.SF, Bsmt.Full.Bath, Fireplaces, log.area, and log.lot.area
+
+Also possibilities: Kitchen.Qual2,3,4
+
+New ideas: Take out a lot of the quality variables.  They seem too suspect to me.
 
 I now perform the most basic ones
 ```{r}
 
 ```
+
+
+She mentions location, location, location
+```{r}
+lm.anova = lm(price~ Neighborhood,data = ames_train)
+summary(lm.anova)
+anova(lm.anova)
+model.lm = lm(price~-1 + Neighborhood,data = ames_train)
+dummies.loc = model.matrix(model.lm)
+#predict.lm(lm.anova,ames_test)
+# Intercept corresponds to Blmngtn
+hier.index = c(2,3,6,7,20,21,22,23,37,39,41,44,46:54,58,63,64)
+# Overall.Qual, Overall.Cond, Year.Built, Bsmt.Fin.Sf.1, Bsmt.Fin.SF.2, Bsmt.Unf.SF, Central.Air,Bsmt.Full.Bath, Bedroom.AbvGr, Fireplaces
+hier.data = ames_train[,hier.index]
+
+
+# Build Hierarchical Model with location
+ames_train %>% group_by(Neighborhood) %>%
+  summarise(min_price = min(price),q1 = quantile(price,.25),med.price = quantile(price,.5),mean.price = mean(price),q3 = quantile(price,.75), max.price = max(price))
+
+# Levels of Neighborhood
+levels.train = levels(ames_train$Neighborhood)
+levels.test = levels(ames_test$Neighborhood)
+
+levels.train == levels.test
+```
+
+
+I have an idea where we could use a hierarchical model with Neighborhood as the first level, and some of the more quantitative variables on the second.
